@@ -3157,7 +3157,7 @@ async function buyCoinPack(packId) {
     }
 
     try {
-        const res = await fetch(API_URL + '?action=create_invoice', {
+        const res = await fetch(API_URL + '/create_invoice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pack: packId, user_id: userId }),
