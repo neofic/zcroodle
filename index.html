@@ -1,0 +1,3395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Croodle Merge · вертикальное поле</title>
+<style>
+    :root {
+        --cell-size: 72px;
+        --item-size: 76px;
+        --cell-gap: 6px;
+        --cell-radius: 16px;
+        --field-cols: 5;
+
+        --icon-size: 32px;
+        --icon-size-small: 22px;
+
+        --merge-scale: 1.35;
+        --merge-brightness: 1.6;
+        --merge-duration: 320ms;
+
+        --toast-w: 520px;
+        --toast-h: 720px;
+        --toast-lift: 8vh;
+    }
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+        margin: 0;
+        height: 100vh;
+        min-height: 100vh;
+        font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        padding: 8px;
+        overflow: hidden;
+    }
+
+    .bg-layer {
+        position: fixed; inset: 0; z-index: -1;
+        background-image: url('images/fullscreen_bg.png');
+        background-size: cover;
+        background-position: center top;
+        background-repeat: no-repeat;
+        pointer-events: none;
+    }
+
+    .game-wrap {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: fit-content;
+        max-width: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .hud-top {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+    }
+
+    .task-box {
+        color: #ffffff;
+        font-size: 0.95rem;
+        line-height: 1.3;
+        text-align: center;
+        min-width: 0;
+        max-width: 100%;
+        padding: 0 2px;
+        text-shadow: 2px 2px 0 rgba(0,0,0,0.75), 0 0 8px rgba(0,0,0,0.6);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        overflow: hidden;
+    }
+    .task-box b { color: #ffffff; }
+
+    .hud-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 1rem;
+        text-shadow: 2px 2px 0 rgba(0,0,0,0.75), 0 0 8px rgba(0,0,0,0.6);
+        min-width: 68px;
+        justify-content: center;
+        white-space: nowrap;
+    }
+    .hud-chip img {
+        width: var(--icon-size); height: var(--icon-size);
+        object-fit: contain; display: block;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,.55));
+    }
+    .hud-chip .icon-fallback { font-size: calc(var(--icon-size) * 0.9); line-height: 1; }
+    .hud-timer.warn { color: #ffffff; }
+
+    .hud-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 4px;
+        flex: 0 0 auto;
+    }
+    .hud-stack--left {
+        align-items: flex-start;
+    }
+    .hud-chip--small {
+        font-size: 0.88rem;
+        min-width: 0;
+        gap: 4px;
+        justify-content: flex-end;
+    }
+    .hud-chip--small img {
+        width: var(--icon-size-small);
+        height: var(--icon-size-small);
+    }
+    .hud-chip--small .icon-fallback {
+        font-size: calc(var(--icon-size-small) * 1.05);
+    }
+
+    /* Кнопка настроек — по размеру совпадает с чипом времени */
+    .settings-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 0.88rem;
+        font-family: inherit;
+        cursor: pointer;
+        text-shadow: 2px 2px 0 rgba(0,0,0,0.75), 0 0 8px rgba(0,0,0,0.6);
+        line-height: 1;
+        transition: transform .12s;
+    }
+    .settings-btn:hover { transform: scale(1.08); }
+    .settings-btn:active { transform: scale(0.94); }
+    .settings-btn img {
+        width: var(--icon-size-small);
+        height: var(--icon-size-small);
+        object-fit: contain;
+        display: block;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,.55));
+    }
+    .settings-btn .icon-fallback {
+        width: var(--icon-size-small);
+        height: var(--icon-size-small);
+        display: flex; align-items: center; justify-content: center;
+        font-size: calc(var(--icon-size-small) * 1.05);
+    }
+
+        .progress-bar {
+        position: relative;
+        width: 200px;
+        max-width: 100%;
+        height: 20px;
+        background: rgba(0, 0, 0, 0.45);
+        border-radius: 10px;
+        box-shadow:
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.35),
+            inset 0 2px 4px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+        isolation: isolate;
+        /* Заставляет браузер аккуратно скруглять дочерний fill на мобильных */
+        -webkit-mask-image: -webkit-radial-gradient(white, black);
+        mask-image: radial-gradient(white, black);
+    }
+        .progress-bar__fill {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 0%;
+        background-color: #ffd166;
+        background-image: linear-gradient(90deg, #ffb347 0%, #ffd166 60%, #fff3c4 100%);
+        background-repeat: no-repeat;
+        background-size: 100% 100%;
+        border-radius: inherit;
+        transition: width 0.45s cubic-bezier(.34,1.4,.64,1);
+        box-shadow:
+            0 0 12px rgba(255, 200, 80, 0.8),
+            inset 0 -2px 4px rgba(0, 0, 0, 0.25);
+        /* Сглаживание на мобильных */
+        transform: translateZ(0);
+        will-change: width;
+    }
+    .progress-bar__fill.full {
+        background-color: #a8ffe0;
+        background-image: linear-gradient(90deg, #7ee7ff 0%, #a8ffe0 60%, #ffffff 100%);
+        box-shadow:
+            0 0 18px rgba(120, 230, 255, 0.9),
+            inset 0 -2px 4px rgba(0, 0, 0, 0.25);
+    }
+    .progress-bar__text {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.78rem;
+        font-weight: 800;
+        color: #ffffff;
+        text-shadow: 1px 1px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.7);
+        pointer-events: none;
+        z-index: 2;
+        transform-origin: 50% 50%;
+        will-change: transform;
+    }
+
+    .board {
+        position: relative;
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: var(--cell-gap);
+        background: rgba(255, 240, 210, 0.08);
+        -webkit-backdrop-filter: blur(12px) saturate(1.15);
+        backdrop-filter: blur(12px) saturate(1.15);
+        border-radius: 24px;
+        box-shadow:
+            0 18px 30px rgba(0, 0, 0, 0.55),
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.18),
+            inset 0 0 30px rgba(0, 0, 0, 0.35);
+        isolation: isolate;
+    }
+
+    .field {
+        display: grid;
+        grid-template-columns: repeat(var(--field-cols), var(--cell-size));
+        gap: var(--cell-gap);
+        justify-content: center;
+        align-content: center;
+        touch-action: none;
+        position: relative;
+    }
+
+    .cell {
+        width: var(--cell-size); height: var(--cell-size);
+        position: relative;
+        display: flex; align-items: center; justify-content: center;
+        background-image: url('images/cell_empty.png');
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        background-position: center;
+        transition: filter .15s;
+    }
+    .cell.filled    { background-image: url('images/cell_filled.png'); }
+    .cell.spawner {
+        background-image: url('images/cell_filled.png');
+        cursor: pointer;
+        animation: spawnerPulse 1.6s ease-in-out infinite;
+        transform-origin: 50% 50%;
+        will-change: transform;
+    }
+    @keyframes spawnerPulse {
+        0%, 100% { transform: scale(1); }
+        50%      { transform: scale(1.06); }
+    }
+    .cell.obstacle  { cursor: not-allowed; }
+    .cell.drop-target { filter: brightness(1.25) drop-shadow(0 0 10px #ffe27a); }
+    .cell.booster-target { filter: brightness(1.4) drop-shadow(0 0 12px #ff5e7e); }
+
+    .item {
+        width: var(--item-size); height: var(--item-size);
+        display: flex; align-items: center; justify-content: center;
+        pointer-events: none; position: relative;
+    }
+    .item img {
+        width: 100%; height: 100%;
+        object-fit: contain;
+        pointer-events: none; -webkit-user-drag: none;
+    }
+    .item .fallback {
+        font-size: calc(var(--item-size) * 0.6);
+        font-weight: bold; color: #2e241b;
+        text-shadow: 2px 2px 0 rgba(0,0,0,.15);
+    }
+    .item.hidden { opacity: 0; }
+
+    .obstacle {
+        width: var(--item-size); height: var(--item-size);
+        display: flex; align-items: center; justify-content: center;
+        pointer-events: none; position: relative;
+    }
+    .obstacle img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .obstacle .fallback { font-size: calc(var(--item-size) * 0.7); }
+
+    .flyer {
+        position: fixed; pointer-events: none; z-index: 1000;
+        width: var(--item-size); height: var(--item-size);
+        display: flex; align-items: center; justify-content: center;
+        background: transparent; border: none;
+        filter: drop-shadow(0 12px 14px rgba(0,0,0,.45));
+        will-change: left, top, transform, opacity;
+    }
+    .flyer img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .flyer .fallback { font-size: calc(var(--item-size) * 0.6); font-weight: bold; color: #fff; }
+    .flyer.drag-ghost { transform: scale(1.12) rotate(-3deg); }
+
+    .particle {
+        position: fixed; pointer-events: none; z-index: 1600;
+        border-radius: 50%;
+        will-change: left, top, transform, opacity;
+    }
+    .bolt {
+        position: fixed; pointer-events: none; z-index: 1650;
+        background: linear-gradient(180deg, #ffffff, #7ee7ff 40%, #4aa8ff 100%);
+        box-shadow: 0 0 14px #7ee7ff, 0 0 28px #4aa8ff;
+        transform-origin: 50% 0; border-radius: 4px;
+    }
+
+    .toast-hero {
+        position: fixed; left: 50%; bottom: 0;
+        width: var(--toast-w); height: var(--toast-h);
+        transform: translate(-50%, calc(110% - var(--toast-lift)));
+        z-index: 1500; pointer-events: none;
+        background-image: url('images/toast_hero.png');
+        background-size: contain;
+        background-position: center bottom;
+        background-repeat: no-repeat;
+        filter: drop-shadow(0 -8px 20px rgba(0,0,0,.4));
+        transition: transform .55s cubic-bezier(.34,1.56,.64,1);
+    }
+    .toast-hero.visible { transform: translate(-50%, calc(0% - var(--toast-lift))); }
+    .toast-hero.leaving {
+        transition: transform .7s cubic-bezier(.5,0,.75,0);
+        transform: translate(-50%, calc(110% - var(--toast-lift)));
+    }
+    .toast-hero--sad { background-image: url('images/toast_hero_sad.png'); }
+
+    .bottom-bar {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: nowrap;
+        min-height: 56px;
+        padding: 0 2px;
+    }
+
+    .inventory {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        height: 56px;
+        padding: 0 10px;
+        background: rgba(0,0,0,0.25);
+        border-radius: 18px;
+        backdrop-filter: blur(8px);
+        flex: 0 0 auto;
+    }
+    .inv-slot {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.08);
+        border: 2px solid rgba(255,255,255,0.25);
+        display: flex; align-items: center; justify-content: center;
+        cursor: grab;
+        touch-action: none;
+        transition: transform .12s, border-color .15s, background .15s;
+        flex: 0 0 auto;
+    }
+    .inv-slot:hover { background: rgba(255,255,255,0.15); }
+    .inv-slot:active { cursor: grabbing; }
+    .inv-slot.active {
+        border-color: #ffd166;
+        background: rgba(255,210,110,0.25);
+        transform: scale(1.08);
+        box-shadow: 0 0 14px rgba(255,209,102,.7);
+    }
+    .inv-slot.empty {
+        opacity: 0.35;
+        pointer-events: none;
+    }
+    .inv-slot img {
+        width: 78%; height: 78%;
+        object-fit: contain;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,.5));
+    }
+    .inv-slot .icon-fallback { font-size: 24px; }
+    .inv-count {
+        position: absolute;
+        right: -6px; bottom: -6px;
+        min-width: 20px; height: 20px;
+        padding: 0 5px;
+        border-radius: 10px;
+        background: #ff5e7e;
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,.4);
+        border: 2px solid #fff;
+    }
+    .inv-slot.empty .inv-count { display: none; }
+
+    .reset-btn-bottom {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 56px;
+        min-width: 88px;
+        padding: 0 14px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-radius: 16px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: inherit;
+        text-shadow: 1px 1px 0 rgba(0,0,0,.6);
+        box-shadow:
+            0 4px 0 rgba(0,0,0,.35),
+            0 6px 10px rgba(0,0,0,.4);
+        transition: transform .08s linear, box-shadow .08s linear, background .12s;
+        flex: 0 0 auto;
+    }
+    .reset-btn-bottom .btn-icon { font-size: 1.1rem; line-height: 1; }
+    .reset-btn-bottom .btn-label { font-size: 0.88rem; font-weight: 700; }
+    .reset-btn-bottom:hover {
+        background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.55);
+    }
+    .reset-btn-bottom:active {
+        transform: translateY(3px);
+        box-shadow:
+            0 1px 0 rgba(0,0,0,.35),
+            0 3px 6px rgba(0,0,0,.35);
+    }
+
+    .shop-btn-bottom {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 56px;
+        padding: 0 14px 0 10px;
+        background: linear-gradient(180deg, #ffd166, #e0a937);
+        color: #4a2e0b;
+        border: 2px solid #fff3c4;
+        border-radius: 18px;
+        font-weight: 800;
+        font-size: 0.95rem;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow:
+            0 4px 0 rgba(0,0,0,.35),
+            0 6px 10px rgba(0,0,0,.4);
+        transition: transform .08s linear, box-shadow .08s linear;
+        white-space: nowrap;
+        text-shadow: 0 1px 0 rgba(255,255,255,.5);
+        flex: 0 0 auto;
+    }
+    .shop-btn-bottom:hover { filter: brightness(1.06); }
+    .shop-btn-bottom:active {
+        transform: translateY(3px);
+        box-shadow:
+            0 1px 0 rgba(0,0,0,.35),
+            0 3px 6px rgba(0,0,0,.35);
+    }
+    .shop-btn-bottom img {
+        width: 32px; height: 32px;
+        object-fit: contain;
+        display: block;
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,.35));
+    }
+    .shop-btn-bottom .icon-fallback {
+        font-size: 24px; line-height: 1;
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .shop-btn-label { font-size: 0.9rem; font-weight: 800; }
+
+    /* === Магазин === */
+    .shop-overlay {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.75);
+        z-index: 2000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+    .shop-overlay.open { display: flex; }
+    .shop-panel {
+        width: min(520px, 100%);
+        max-height: 90vh;
+        overflow-y: auto;
+        background: rgba(255, 240, 210, 0.08);
+        -webkit-backdrop-filter: blur(12px) saturate(1.15);
+        backdrop-filter: blur(12px) saturate(1.15);
+        border-radius: 24px;
+        padding: 22px 20px 18px;
+        box-shadow:
+            0 18px 30px rgba(0, 0, 0, 0.55),
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.18),
+            inset 0 0 30px rgba(0, 0, 0, 0.35);
+        color: #ffffff;
+        position: relative;
+        isolation: isolate;
+    }
+    .shop-title {
+        font-size: 1.3rem;
+        font-weight: 800;
+        text-align: center;
+        margin-bottom: 6px;
+        text-shadow: 2px 2px 0 rgba(0,0,0,.7);
+    }
+    .shop-sub {
+        text-align: center;
+        font-size: .85rem;
+        opacity: .85;
+        margin-bottom: 14px;
+    }
+    .shop-close {
+        position: absolute;
+        top: 10px; right: 14px;
+        background: transparent; border: none;
+        color: #fff; font-size: 1.6rem;
+        cursor: pointer;
+        line-height: 1;
+        opacity: .8;
+    }
+    .shop-close:hover { opacity: 1; }
+
+    .shop-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    .shop-item {
+        display: grid;
+        grid-template-columns: 72px 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.06);
+        border: 2px solid rgba(255,255,255,0.14);
+    }
+    .shop-item-icon {
+        width: 72px; height: 72px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .shop-item-icon img {
+        width: 100%; height: 100%; object-fit: contain;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,.5));
+    }
+    .shop-item-icon .icon-fallback { font-size: 40px; }
+    .shop-item-info h4 {
+        margin: 0 0 4px;
+        font-size: 1rem;
+        font-weight: 800;
+    }
+    .shop-item-info p {
+        margin: 0;
+        font-size: .82rem;
+        opacity: .85;
+        line-height: 1.35;
+    }
+    .shop-item-buy {
+        background: #ffd166;
+        color: #4a2e0b;
+        border: 2px solid #fff3c4;
+        border-radius: 14px;
+        padding: 8px 14px;
+        font-weight: 800;
+        font-size: .9rem;
+        cursor: pointer;
+        box-shadow: 0 4px 0 #8f621f;
+        display: flex; align-items: center; gap: 4px;
+        white-space: nowrap;
+        transition: transform .08s linear;
+    }
+    .shop-item-buy:active {
+        transform: translateY(3px);
+        box-shadow: 0 1px 0 #8f621f;
+    }
+    .shop-item-buy:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        filter: grayscale(.6);
+    }
+    .shop-item-buy img.shop-coin-icon {
+        width: 18px; height: 18px;
+        object-fit: contain;
+        display: inline-block; vertical-align: middle;
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,.4));
+    }
+
+    /* === Туториал === */
+    .tutorial-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.82);
+        z-index: 2100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        backdrop-filter: blur(4px);
+    }
+    .tutorial-overlay.open { display: flex; }
+
+    .tutorial-panel {
+        width: min(480px, 100%);
+        max-height: 92vh;
+        overflow-y: auto;
+        background: rgba(255, 240, 210, 0.08);
+        -webkit-backdrop-filter: blur(14px) saturate(1.2);
+        backdrop-filter: blur(14px) saturate(1.2);
+        border-radius: 24px;
+        padding: 24px 22px 20px;
+        box-shadow:
+            0 18px 40px rgba(0, 0, 0, 0.65),
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.25),
+            inset 0 0 40px rgba(0, 0, 0, 0.35);
+        color: #ffffff;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+    .tutorial-image-wrap {
+        width: 360px;
+        height: 360px;
+        max-width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 18px;
+        padding: 8px;
+    }
+    .tutorial-image-wrap img {
+        max-width: 100%; max-height: 100%;
+        object-fit: contain; display: block;
+        filter: drop-shadow(0 6px 10px rgba(0,0,0,.4));
+    }
+    .tutorial-title {
+        margin: 6px 0 0;
+        font-size: 1.25rem;
+        font-weight: 800;
+        text-shadow: 2px 2px 0 rgba(0,0,0,.6);
+    }
+    .tutorial-text {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        opacity: 0.95;
+        max-width: 400px;
+    }
+    .tutorial-ok {
+        margin-top: 8px;
+        background: linear-gradient(180deg, #ffd166, #e0a937);
+        color: #4a2e0b;
+        border: 2px solid #fff3c4;
+        border-radius: 16px;
+        padding: 10px 26px;
+        font-weight: 800;
+        font-size: 1rem;
+        cursor: pointer;
+        box-shadow:
+            0 5px 0 #8f621f,
+            0 8px 14px rgba(0,0,0,.5);
+        transition: transform .08s linear, box-shadow .08s linear;
+        font-family: inherit;
+    }
+    .tutorial-ok:hover { filter: brightness(1.06); }
+    .tutorial-ok:active {
+        transform: translateY(4px);
+        box-shadow:
+            0 1px 0 #8f621f,
+            0 4px 10px rgba(0,0,0,.45);
+    }
+
+    /* === Пауза === */
+    .pause-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 2200;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+    .pause-overlay.open { display: flex; }
+    .pause-panel {
+        width: min(360px, 100%);
+        background: rgba(255, 240, 210, 0.08);
+        -webkit-backdrop-filter: blur(14px) saturate(1.2);
+        backdrop-filter: blur(14px) saturate(1.2);
+        border-radius: 24px;
+        padding: 28px 22px 22px;
+        box-shadow:
+            0 18px 40px rgba(0, 0, 0, 0.65),
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.25),
+            inset 0 0 40px rgba(0, 0, 0, 0.35);
+        color: #ffffff;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+    }
+    .pause-icon {
+        font-size: 3rem;
+        line-height: 1;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,.5));
+    }
+    .pause-title {
+        font-size: 1.2rem;
+        font-weight: 800;
+        text-shadow: 2px 2px 0 rgba(0,0,0,.6);
+    }
+    .pause-sub {
+        font-size: 0.9rem;
+        opacity: 0.85;
+        line-height: 1.4;
+    }
+    .pause-resume {
+        margin-top: 4px;
+        background: linear-gradient(180deg, #ffd166, #e0a937);
+        color: #4a2e0b;
+        border: 2px solid #fff3c4;
+        border-radius: 16px;
+        padding: 10px 26px;
+        font-weight: 800;
+        font-size: 1rem;
+        cursor: pointer;
+        box-shadow:
+            0 5px 0 #8f621f,
+            0 8px 14px rgba(0,0,0,.5);
+        transition: transform .08s linear, box-shadow .08s linear;
+        font-family: inherit;
+    }
+    .pause-resume:hover { filter: brightness(1.06); }
+    .pause-resume:active {
+        transform: translateY(4px);
+        box-shadow:
+            0 1px 0 #8f621f,
+            0 4px 10px rgba(0,0,0,.45);
+    }
+
+    /* === Настройки === */
+    .settings-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.78);
+        z-index: 2300;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+    }
+    .settings-overlay.open { display: flex; }
+
+    .settings-panel {
+        width: min(440px, 100%);
+        max-height: 92vh;
+        overflow-y: auto;
+        background: rgba(255, 240, 210, 0.08);
+        -webkit-backdrop-filter: blur(14px) saturate(1.2);
+        backdrop-filter: blur(14px) saturate(1.2);
+        border-radius: 24px;
+        padding: 26px 22px 20px;
+        box-shadow:
+            0 18px 40px rgba(0, 0, 0, 0.65),
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.25),
+            inset 0 0 40px rgba(0, 0, 0, 0.35);
+        color: #ffffff;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+    }
+    .settings-title {
+        font-size: 1.3rem;
+        font-weight: 800;
+        text-shadow: 2px 2px 0 rgba(0,0,0,.6);
+        margin: 0;
+    }
+    .settings-row {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        text-align: left;
+    }
+    .settings-row__label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-shadow: 1px 1px 0 rgba(0,0,0,.6);
+    }
+    .settings-row__label .emoji {
+        font-size: 1.2rem;
+    }
+    .settings-row__value {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.9;
+        font-weight: 800;
+    }
+
+    .volume-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 10px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #ffd166 0%, #ffd166 0%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.45) 100%);
+        box-shadow:
+            inset 0 0 0 1.5px rgba(255, 240, 200, 0.35),
+            inset 0 2px 4px rgba(0, 0, 0, 0.6);
+        outline: none;
+        cursor: pointer;
+    }
+    .volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, #fff3c4, #ffd166);
+        border: 2px solid #8f621f;
+        box-shadow: 0 2px 4px rgba(0,0,0,.5);
+        cursor: pointer;
+    }
+    .volume-slider::-moz-range-thumb {
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, #fff3c4, #ffd166);
+        border: 2px solid #8f621f;
+        box-shadow: 0 2px 4px rgba(0,0,0,.5);
+        cursor: pointer;
+    }
+
+    .settings-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 4px;
+    }
+    .settings-btn-ghost {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        border: 2px solid rgba(255,255,255,0.35);
+        border-radius: 14px;
+        padding: 9px 16px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        cursor: pointer;
+        font-family: inherit;
+        transition: transform .08s linear, background .12s;
+    }
+    .settings-btn-ghost:hover { background: rgba(255,255,255,0.16); }
+    .settings-btn-ghost:active { transform: translateY(2px); }
+
+    .settings-btn-primary {
+        background: linear-gradient(180deg, #ffd166, #e0a937);
+        color: #4a2e0b;
+        border: 2px solid #fff3c4;
+        border-radius: 14px;
+        padding: 9px 22px;
+        font-weight: 800;
+        font-size: 0.95rem;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow:
+            0 4px 0 #8f621f,
+            0 6px 10px rgba(0,0,0,.4);
+        transition: transform .08s linear, box-shadow .08s linear;
+    }
+    .settings-btn-primary:hover { filter: brightness(1.06); }
+    .settings-btn-primary:active {
+        transform: translateY(3px);
+        box-shadow:
+            0 1px 0 #8f621f,
+            0 3px 6px rgba(0,0,0,.4);
+    }
+
+    @media (max-width: 700px) {
+    :root {
+        --icon-size: 28px;           /* было 22px */
+        --icon-size-small: 22px;     /* было 16px */
+        --toast-w: 360px;
+        --toast-h: 500px;
+        --toast-lift: 6vh;
+    }
+    body { padding: 6px; }
+    .task-box { font-size: .9rem; }              /* было .78rem */
+    .hud-chip { font-size: 1rem; }               /* было .9rem */
+    .hud-chip--small { font-size: .95rem; }      /* было .75rem */
+    .progress-bar { width: 200px; height: 20px; } /* было 160/18 */
+    .progress-bar__text { font-size: 0.82rem; }  /* было 0.72rem */
+        .inv-slot { width: 38px; height: 38px; }
+        .inventory { height: 48px; padding: 0 8px; }
+        .bottom-bar { min-height: 48px; gap: 6px; }
+        .reset-btn-bottom { height: 48px; min-width: 76px; padding: 0 10px; font-size: 0.8rem; }
+        .reset-btn-bottom .btn-label { font-size: 0.78rem; }
+        .shop-btn-bottom { height: 48px; padding: 0 12px 0 8px; font-size: 0.8rem; gap: 6px; }
+        .shop-btn-bottom img, .shop-btn-bottom .icon-fallback { width: 26px; height: 26px; }
+        .shop-btn-bottom .icon-fallback { font-size: 20px; }
+        .shop-btn-label { font-size: 0.8rem; }
+        .shop-item { grid-template-columns: 56px 1fr auto; gap: 10px; padding: 10px; }
+        .shop-item-icon { width: 56px; height: 56px; }
+        .tutorial-image-wrap { width: 240px; height: 240px; }
+        .tutorial-title { font-size: 1.05rem; }
+        .tutorial-text { font-size: 0.85rem; }
+        .tutorial-ok { padding: 8px 20px; font-size: 0.9rem; }
+        .settings-btn { font-size: 0.75rem; }
+    }
+</style>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<div class="bg-layer"></div>
+
+<div class="toast-hero" id="toastHero"></div>
+<div class="toast-hero toast-hero--sad" id="toastHeroSad"></div>
+
+<div class="game-wrap">
+
+    <div class="hud-top">
+        <!-- Левая колонка: время (маленькое) + настройки -->
+        <div class="hud-stack hud-stack--left">
+            <div class="hud-chip hud-chip--small hud-timer" id="timerChip" title="Оставшееся время">
+                <img src="images/clock.png" alt="время"
+                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback',textContent:'⏱'}))">
+                <span id="timerText">03:00</span>
+            </div>
+            <button class="settings-btn" id="settingsBtn" title="Настройки">
+                <img src="images/settings.png" alt="настройки"
+                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback',textContent:'⚙'}))">
+            </button>
+        </div>
+
+        <div class="task-box">
+            <div id="taskText">1. Собери <b>1 письмо</b></div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-bar__fill" id="progressBarFill"></div>
+                <span class="progress-bar__text" id="taskProgress">0 / 1</span>
+            </div>
+        </div>
+
+        <!-- Правая колонка: энергия + монеты -->
+        <div class="hud-stack">
+            <div class="hud-chip hud-chip--small hud-energy" title="Энергия — тратится на ходы фабрики">
+                <img src="images/energy.png" alt="энергия"
+                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback',textContent:'⚡'}))">
+                <span id="energyText">10</span>
+            </div>
+            <div class="hud-chip hud-chip--small hud-coins" title="Монеты — тратятся в магазине бустеров">
+                <img src="images/coin.png" alt="монеты"
+                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback',textContent:'🪙'}))">
+                <span id="coinsText">10</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="board">
+        <div class="field" id="field"></div>
+    </div>
+
+    <div class="bottom-bar">
+        <button class="reset-btn-bottom" id="resetBtn" title="Сбросить прогресс">
+            <span class="btn-icon">⟲</span>
+            <span class="btn-label">Сброс</span>
+        </button>
+        <div class="inventory" id="inventory"></div>
+        <button class="shop-btn-bottom" id="shopBtn" title="Купить бустеры">
+            <img src="images/shop.png" alt="магазин" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback',textContent:'🛒'}))">
+            <span class="shop-btn-label">Бустеры</span>
+        </button>
+    </div>
+
+</div>
+
+<div class="shop-overlay" id="shopOverlay">
+    <div class="shop-panel" id="shopPanel">
+        <button class="shop-close" id="shopClose">✕</button>
+        <div class="shop-title">Магазин бустеров</div>
+        <div class="shop-sub">Время на поле остановлено</div>
+        <div class="shop-list" id="shopList"></div>
+        <div class="shop-title" style="margin-top:20px;">Монеты</div>
+<div class="shop-list" id="coinPacksList"></div>
+    </div>
+</div>
+
+<div class="tutorial-overlay" id="tutorialOverlay">
+    <div class="tutorial-panel">
+        <div class="tutorial-image-wrap">
+            <img id="tutorialImage" src="" alt="">
+        </div>
+        <h3 class="tutorial-title" id="tutorialTitle"></h3>
+        <p class="tutorial-text" id="tutorialText"></p>
+        <button class="tutorial-ok" id="tutorialOk">Понятно</button>
+    </div>
+</div>
+
+<div class="pause-overlay" id="pauseOverlay">
+    <div class="pause-panel">
+        <div class="pause-icon">⏸</div>
+        <div class="pause-title">Пауза</div>
+        <div class="pause-sub">Игра остановлена, пока окно не в фокусе.<br>Таймер не идёт.</div>
+        <button class="pause-resume" id="pauseResume">Продолжить</button>
+    </div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-panel">
+        <h3 class="settings-title">Настройки</h3>
+
+        <div class="settings-row">
+            <div class="settings-row__label">
+                <span class="emoji">🎵</span>
+                <span>Музыка</span>
+                <span class="settings-row__value" id="musicValue">50%</span>
+            </div>
+            <input type="range" class="volume-slider" id="musicSlider" min="0" max="100" value="50" step="1">
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-row__label">
+                <span class="emoji">🔊</span>
+                <span>Звуки игры</span>
+                <span class="settings-row__value" id="sfxValue">100%</span>
+            </div>
+            <input type="range" class="volume-slider" id="sfxSlider" min="0" max="100" value="100" step="1">
+        </div>
+
+        <div class="settings-actions">
+            <button class="settings-btn-ghost" id="settingsMute">Выключить всё</button>
+            <button class="settings-btn-primary" id="settingsClose">Продолжить</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // ================== КОНФИГ ==================
+    const MAX_LEVEL = 10;
+    const IMG_PATH = 'images';
+    const IMG_EXT  = '.png';
+    const MUSIC_PATH = 'images/music.mp3';
+
+    const START_COINS  = 10;
+    const START_ENERGY = 10;
+    const SPAWN_COST  = 1;
+
+    const SAVE_KEY = 'croodle_merge_save_v1';
+    const SETTINGS_KEY = 'croodle_merge_settings_v1';
+
+    const ROCK_SLOW_SPAWN_EVERY = 6;
+    const LOSE_CHECK_INTERVAL_MS = 2000;
+
+    // ================== ЗАДАНИЯ ==================
+    const TASKS = [
+        { level: 3, count: 1, seconds: 60,  rows: 3,  cols: 3, rewardEnergy: 8,  rewardCoins: 2,
+          obstacles: [], tutorial: 'merge',
+          text: 'Собери <b>1 письмо</b>' },
+        { level: 3, count: 1, seconds: 60,  rows: 3,  cols: 3, rewardEnergy: 8,  rewardCoins: 2,
+          obstacles: [], tutorial: null,
+          text: 'Собери <b>1 письмо</b>' },
+        { level: 4, count: 1, seconds: 90,  rows: 3,  cols: 4, rewardEnergy: 9,  rewardCoins: 3,
+          obstacles: [], tutorial: null,
+          text: 'Собери <b>1 коврик</b>' },
+        { level: 4, count: 2, seconds: 120, rows: 4,  cols: 4, rewardEnergy: 10, rewardCoins: 3,
+          obstacles: ['rock_slow'], tutorial: 'obstacle',
+          text: 'Собери <b>2 коврика</b>' },
+        { level: 4, count: 2, seconds: 120, rows: 4,  cols: 4, rewardEnergy: 10, rewardCoins: 3,
+          obstacles: ['rock_slow'], tutorial: null,
+          text: 'Собери <b>2 коврика</b>' },
+        { level: 4, count: 3, seconds: 150, rows: 5,  cols: 4, rewardEnergy: 11, rewardCoins: 4,
+          obstacles: ['rock_slow'], tutorial: null,
+          text: 'Собери <b>3 коврика</b>' },
+        { level: 5, count: 1, seconds: 150, rows: 5,  cols: 4, rewardEnergy: 15, rewardCoins: 4,
+          obstacles: ['rock_slow', 'slayer'], tutorial: 'slayer',
+          text: 'Собери <b>1 дневник</b>' },
+        { level: 5, count: 1, seconds: 180, rows: 5,  cols: 5, rewardEnergy: 16, rewardCoins: 5,
+          obstacles: ['rock_slow', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 дневник</b>' },
+        { level: 5, count: 2, seconds: 210, rows: 6,  cols: 5, rewardEnergy: 17, rewardCoins: 5,
+          obstacles: ['rock_slow', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 дневника</b>' },
+        { level: 5, count: 2, seconds: 210, rows: 6,  cols: 5, rewardEnergy: 18, rewardCoins: 6,
+          obstacles: ['rock_slow', 'rock_fast'], tutorial: 'rock_fast',
+          text: 'Собери <b>2 дневника</b>' },
+        { level: 5, count: 3, seconds: 240, rows: 7,  cols: 5, rewardEnergy: 19, rewardCoins: 6,
+          obstacles: ['rock_slow', 'rock_fast'], tutorial: null,
+          text: 'Собери <b>3 дневника</b>' },
+        { level: 5, count: 3, seconds: 240, rows: 7,  cols: 5, rewardEnergy: 20, rewardCoins: 7,
+          obstacles: ['rock_slow', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>3 дневника</b>' },
+        { level: 6, count: 1, seconds: 240, rows: 7,  cols: 5, rewardEnergy: 21, rewardCoins: 8,
+          obstacles: ['rock_slow', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 учебник</b>' },
+        { level: 6, count: 1, seconds: 240, rows: 8,  cols: 5, rewardEnergy: 22, rewardCoins: 8,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 учебник</b>' },
+        { level: 6, count: 2, seconds: 300, rows: 8,  cols: 5, rewardEnergy: 23, rewardCoins: 10,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 учебника</b>' },
+        { level: 6, count: 2, seconds: 300, rows: 9,  cols: 5, rewardEnergy: 24, rewardCoins: 10,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 учебника</b>' },
+        { level: 6, count: 3, seconds: 330, rows: 9,  cols: 5, rewardEnergy: 25, rewardCoins: 12,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>3 учебника</b>' },
+        { level: 6, count: 3, seconds: 330, rows: 10, cols: 5, rewardEnergy: 26, rewardCoins: 12,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>3 учебника</b>' },
+        { level: 6, count: 4, seconds: 360, rows: 10, cols: 5, rewardEnergy: 27, rewardCoins: 14,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>4 учебника</b>' },
+        { level: 6, count: 5, seconds: 420, rows: 10, cols: 6, rewardEnergy: 28, rewardCoins: 16,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>5 учебников</b>' },
+
+        { level: 7, count: 1, seconds: 270, rows: 8,  cols: 5, rewardEnergy: 30, rewardCoins: 9,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 бутылочку</b>' },
+        { level: 7, count: 2, seconds: 330, rows: 8,  cols: 6, rewardEnergy: 30, rewardCoins: 10,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 бутылочки</b>' },
+        { level: 7, count: 3, seconds: 390, rows: 9,  cols: 6, rewardEnergy: 30, rewardCoins: 12,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer'], tutorial: null,
+          text: 'Собери <b>3 бутылочки</b>' },
+        { level: 8, count: 1, seconds: 330, rows: 9,  cols: 6, rewardEnergy: 30, rewardCoins: 12,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 фонарь</b>' },
+        { level: 8, count: 2, seconds: 390, rows: 10, cols: 6, rewardEnergy: 30, rewardCoins: 14,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 фонаря</b>' },
+        { level: 8, count: 3, seconds: 450, rows: 10, cols: 6, rewardEnergy: 30, rewardCoins: 16,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>3 фонаря</b>' },
+        { level: 9, count: 1, seconds: 390, rows: 10, cols: 6, rewardEnergy: 30, rewardCoins: 16,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 часы</b>' },
+        { level: 9, count: 2, seconds: 450, rows: 11, cols: 6, rewardEnergy: 30, rewardCoins: 18,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 часов</b>' },
+        { level: 10, count: 1, seconds: 450, rows: 11, cols: 6, rewardEnergy: 33, rewardCoins: 20,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>1 кошелек</b>' },
+        { level: 10, count: 2, seconds: 540, rows: 12, cols: 6, rewardEnergy: 35, rewardCoins: 24,
+          obstacles: ['rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_slow', 'rock_fast', 'rock_fast', 'rock_fast', 'rock_fast', 'slayer', 'slayer', 'slayer'], tutorial: null,
+          text: 'Собери <b>2 кошелька</b>' }
+    ];
+
+    // ================== ТУТОРИАЛЫ ==================
+    const TUTORIALS = {
+        merge: {
+            img: 'tutorial_merge',
+            title: 'Как объединять предметы',
+            text: 'Перетащи одну фишку на другую того же уровня, чтобы получить предмет выше уровнем. Чем выше уровень — тем ценнее предмет.'
+        },
+        obstacle: {
+            img: 'tutorial_obstacle',
+            title: 'Осторожно, камни!',
+            text: 'Серые камни периодически плодятся и занимают свободные клетки. Если они захватят всё поле — уровень провален. Покупай бомбы в магазине, чтобы их уничтожать.'
+        },
+        slayer: {
+            img: 'tutorial_slayer',
+            title: 'Разрушитель',
+            text: 'Этот враг раз в несколько ходов бьёт молнией в случайную фишку и уничтожает её. Следи за ним — не оставляй редкие фишки без присмотра.'
+        },
+        rock_fast: {
+            img: 'tutorial_rock_fast',
+            title: 'Быстрый камень',
+            text: 'Зелёный камень растёт каждый ход, а не раз в несколько, как серый. С ним нужно расправляться особенно быстро — иначе поле забьётся за секунды.'
+        },
+        shop: {
+            img: 'tutorial_shop',
+            title: 'Магазин бустеров',
+            text: 'За монеты можно купить бомбы и метлу. Бомба уничтожает клетки, метла — все усложнители сразу.'
+        }
+    };
+
+    const FALLBACK = {
+        1:'🌰', 2:'🌿', 3:'🌸', 4:'🍎', 5:'🐞',
+        6:'👑', 7:'🔮', 8:'🪶', 9:'🖋', 10:'📜'
+    };
+
+    const OBSTACLE_CFG = {
+        rock_slow: { img: 'obstacle_rock_slow', fallback: '🪨' },
+        rock_fast: { img: 'obstacle_rock_fast', fallback: '🌱' },
+        slayer:    { img: 'obstacle_slayer',    fallback: '⚡', cooldown: 6 }
+    };
+
+    const BOOSTER_CFG = {
+        bomb: {
+            img: 'booster_bomb', fallback: '💣',
+            name: 'Бомба-крест', desc: 'Уничтожает клетку и 4 соседних (крест)',
+            price: 15, targetRequired: true
+        },
+        mega: {
+            img: 'booster_mega', fallback: '💥',
+            name: 'Мега-бомба', desc: 'Уничтожает 3×3 вокруг клетки',
+            price: 30, targetRequired: true
+        },
+        cleaner: {
+            img: 'booster_cleaner', fallback: '🧹',
+            name: 'Метла', desc: 'Сметает все усложнители с поля',
+            price: 25, targetRequired: false
+        }
+    };
+
+    // ================== НАСТРОЙКИ ЗВУКА ==================
+    // Музыка по умолчанию в 2 раза тише звуков.
+    // sfxVolume = 1.0 (100%), musicVolume = 0.5 (50%).
+    const DEFAULT_SETTINGS = { sfxVolume: 1.0, musicVolume: 0.5 };
+    let settings = { ...DEFAULT_SETTINGS };
+
+    function loadSettings() {
+        try {
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (typeof data.sfxVolume === 'number')   settings.sfxVolume   = Math.max(0, Math.min(1, data.sfxVolume));
+            if (typeof data.musicVolume === 'number') settings.musicVolume = Math.max(0, Math.min(1, data.musicVolume));
+        } catch(e) {}
+    }
+    function saveSettings() {
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
+    }
+    loadSettings();
+
+    // ================== МУЗЫКА ==================
+    const music = new Audio(MUSIC_PATH);
+    music.loop = true;
+    music.preload = 'auto';
+    music.volume = settings.musicVolume;
+    let musicStarted = false;
+
+    function startMusicIfNeeded() {
+        if (musicStarted) return;
+        musicStarted = true;
+        // Играем; если браузер блокирует — ждём следующего жеста
+        const p = music.play();
+        if (p && typeof p.catch === 'function') {
+            p.catch(() => {
+                musicStarted = false;
+                const oncePlay = () => {
+                    musicStarted = true;
+                    music.play().catch(()=>{});
+                    window.removeEventListener('pointerdown', oncePlay);
+                    window.removeEventListener('keydown', oncePlay);
+                    window.removeEventListener('touchstart', oncePlay);
+                };
+                window.addEventListener('pointerdown', oncePlay, { once: true });
+                window.addEventListener('keydown', oncePlay, { once: true });
+                window.addEventListener('touchstart', oncePlay, { once: true });
+            });
+        }
+    }
+    function pauseMusic() {
+        try { music.pause(); } catch(e) {}
+    }
+    function resumeMusic() {
+        if (!musicStarted) { startMusicIfNeeded(); return; }
+        music.play().catch(()=>{});
+    }
+    function applyMusicVolume() {
+        music.volume = settings.musicVolume;
+    }
+
+    // ================== ЗВУК ==================
+    let audioCtx = null;
+    function getAudioCtx() {
+        if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+    function tone({ freq=440, type='sine', dur=0.15, vol=0.25, slideTo=null, delay=0 }) {
+        if (settings.sfxVolume <= 0) return;
+        const ctx = getAudioCtx(); if (!ctx) return;
+        const t0 = ctx.currentTime + delay;
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+        if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+        const finalVol = vol * settings.sfxVolume;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(finalVol, t0 + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0); osc.stop(t0 + dur + 0.02);
+    }
+    function playSpawn() {
+        tone({ freq: 520, slideTo: 880, type: 'triangle', dur: 0.16, vol: 0.22 });
+        tone({ freq: 1200, type: 'sine', dur: 0.08, vol: 0.10, delay: 0.04 });
+    }
+    function playMerge() {
+        tone({ freq: 380, slideTo: 760,  type: 'sine',     dur: 0.20, vol: 0.25 });
+        tone({ freq: 660, slideTo: 1320, type: 'triangle', dur: 0.22, vol: 0.18, delay: 0.05 });
+        tone({ freq: 1760, type: 'sine',   dur: 0.12, vol: 0.08, delay: 0.10 });
+    }
+    function playZap() {
+        tone({ freq: 1400, slideTo: 260, type: 'sawtooth', dur: 0.16, vol: 0.18 });
+        tone({ freq: 2400, slideTo: 500, type: 'square',   dur: 0.12, vol: 0.08, delay: 0.02 });
+    }
+    function playGrow() {
+        tone({ freq: 220, slideTo: 340, type: 'triangle', dur: 0.22, vol: 0.16 });
+    }
+    function playBoom() {
+        tone({ freq: 140, slideTo: 40, type: 'sawtooth', dur: 0.35, vol: 0.35 });
+        tone({ freq: 900, slideTo: 120, type: 'square',   dur: 0.25, vol: 0.10, delay: 0.02 });
+    }
+    function playCoin() {
+        tone({ freq: 880, type: 'triangle', dur: 0.08, vol: 0.22 });
+        tone({ freq: 1320, type: 'sine',    dur: 0.10, vol: 0.18, delay: 0.06 });
+    }
+    function playFanfare() {
+        const notes = [
+            { freq: 523.25, delay: 0.00, dur: 0.18, vol: 0.28 },
+            { freq: 659.25, delay: 0.16, dur: 0.18, vol: 0.28 },
+            { freq: 783.99, delay: 0.32, dur: 0.18, vol: 0.28 },
+            { freq: 1046.50, delay: 0.48, dur: 0.45, vol: 0.32 },
+            { freq: 1318.51, delay: 0.62, dur: 0.60, vol: 0.22 }
+        ];
+        notes.forEach(n => tone({ freq: n.freq, type: 'triangle', dur: n.dur, vol: n.vol, delay: n.delay }));
+        tone({ freq: 2093, type: 'sine', dur: 0.5, vol: 0.06, delay: 0.5 });
+    }
+    function playSadTune() {
+        tone({ freq: 659.25, type: 'sine',     dur: 0.22, vol: 0.24, delay: 0.00 });
+        tone({ freq: 587.33, type: 'sine',     dur: 0.22, vol: 0.24, delay: 0.20 });
+        tone({ freq: 523.25, type: 'triangle', dur: 0.24, vol: 0.26, delay: 0.40 });
+        tone({ freq: 392.00, type: 'sine',     dur: 0.55, vol: 0.22, delay: 0.64 });
+        tone({ freq: 329.63, type: 'sine',     dur: 0.70, vol: 0.20, delay: 0.95 });
+    }
+
+    // ================== СОСТОЯНИЕ ==================
+    let ROWS = 3, COLS = 3;
+    let TOTAL_CELLS = ROWS * COLS;
+
+    let cells = new Array(TOTAL_CELLS).fill(0);
+    let cellEls = [];
+    let obstacles = [];
+    let spawnerIndex = 0;
+
+    let rockSlowSpawnCounter = 0;
+    let loseCheckHandle = null;
+
+    let inventory = { bomb: 0, mega: 0, cleaner: 0 };
+    let activeBooster = null;
+
+    let shownTutorials = {};
+
+    const fieldEl      = document.getElementById('field');
+    const boardEl      = document.querySelector('.board');
+    const resetBtn     = document.getElementById('resetBtn');
+    const coinsTextEl  = document.getElementById('coinsText');
+    const energyTextEl = document.getElementById('energyText');
+    const timerTextEl  = document.getElementById('timerText');
+    const timerChipEl  = document.getElementById('timerChip');
+    const taskTextEl   = document.getElementById('taskText');
+    const taskProgEl   = document.getElementById('taskProgress');
+
+    const toastHero    = document.getElementById('toastHero');
+    const toastHeroSad = document.getElementById('toastHeroSad');
+    const inventoryEl  = document.getElementById('inventory');
+    const shopBtn      = document.getElementById('shopBtn');
+    const shopOverlay  = document.getElementById('shopOverlay');
+    const shopClose    = document.getElementById('shopClose');
+    const shopListEl   = document.getElementById('shopList');
+
+    const tutorialOverlay = document.getElementById('tutorialOverlay');
+    const tutorialImageEl = document.getElementById('tutorialImage');
+    const tutorialTitleEl = document.getElementById('tutorialTitle');
+    const tutorialTextEl  = document.getElementById('tutorialText');
+    const tutorialOkBtn   = document.getElementById('tutorialOk');
+
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    const pauseResume  = document.getElementById('pauseResume');
+
+    const settingsBtn      = document.getElementById('settingsBtn');
+    const settingsOverlay  = document.getElementById('settingsOverlay');
+    const settingsClose    = document.getElementById('settingsClose');
+    const settingsMute     = document.getElementById('settingsMute');
+    const musicSlider      = document.getElementById('musicSlider');
+    const sfxSlider        = document.getElementById('sfxSlider');
+    const musicValueEl     = document.getElementById('musicValue');
+    const sfxValueEl       = document.getElementById('sfxValue');
+
+    let coins = START_COINS;
+    let energy = START_ENERGY;
+    let taskStartSnapshot = null;
+    let timeLeft = 0;
+    let timerHandle = null;
+    let taskProgress = 0;
+    let dragState = null;
+    let spawning = false;
+
+    let currentTaskIndex = 0;
+    let gameFinished = false;
+    let transitionLock = false;
+    let shopOpen = false;
+    let tutorialOpen = false;
+    let tutorialOnDone = null;
+    let paused = false;
+    let settingsOpen = false;
+let mergeInFlight = false;
+
+    // ================== HUD ==================
+    function updateCoinsUI() { coinsTextEl.textContent = coins; }
+    function updateEnergyUI() { energyTextEl.textContent = energy; }
+    function updateTimerUI() {
+        const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+        const s = String(timeLeft % 60).padStart(2, '0');
+        timerTextEl.textContent = `${m}:${s}`;
+        timerChipEl.classList.toggle('warn', timeLeft <= 30);
+    }
+    function updateTaskProgressUI() {
+        const t = TASKS[currentTaskIndex];
+        if (!t) return;
+        taskProgEl.textContent = `${taskProgress} / ${t.count}`;
+        const fill = document.getElementById('progressBarFill');
+        if (fill) {
+            const pct = t.count > 0 ? Math.min(100, (taskProgress / t.count) * 100) : 0;
+            fill.style.width = pct + '%';
+            fill.classList.toggle('full', taskProgress >= t.count);
+        }
+    }
+    function refreshTaskText() {
+        const t = TASKS[currentTaskIndex];
+        if (!t) { taskTextEl.innerHTML = `🏆 <b>Все выполнено!</b>`; return; }
+        taskTextEl.innerHTML = `${currentTaskIndex + 1}. ${t.text}`;
+    }
+
+    // ================== ТУТОРИАЛЫ ==================
+    function showTutorial(name, onDone) {
+        const cfg = TUTORIALS[name];
+        if (!cfg) { onDone && onDone(); return; }
+
+        tutorialOpen = true;
+        tutorialOnDone = onDone || null;
+
+        tutorialTitleEl.textContent = cfg.title || '';
+        tutorialTextEl.innerHTML = cfg.text || '';
+
+        tutorialImageEl.src = `${IMG_PATH}/${cfg.img}${IMG_EXT}`;
+        tutorialImageEl.alt = cfg.title || name;
+        tutorialImageEl.style.visibility = 'visible';
+        tutorialImageEl.onerror = () => { tutorialImageEl.style.visibility = 'hidden'; };
+
+        tutorialOverlay.classList.add('open');
+    }
+    function closeTutorial() {
+        tutorialOverlay.classList.remove('open');
+        tutorialOpen = false;
+        const cb = tutorialOnDone;
+        tutorialOnDone = null;
+        if (typeof cb === 'function') cb();
+    }
+    tutorialOkBtn.addEventListener('click', closeTutorial);
+
+    // ================== ПАУЗА ==================
+    function pauseGame() {
+        if (paused) return;
+        if (gameFinished) return;
+        if (transitionLock) return;
+        if (tutorialOpen) return;
+
+        paused = true;
+
+        if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+        if (loseCheckHandle) { clearInterval(loseCheckHandle); loseCheckHandle = null; }
+
+        pauseMusic();
+
+        mergeInFlight = false;
+
+        if (dragState) {
+            try { dragState.ghost && dragState.ghost.remove(); } catch(e) {}
+            if (dragState.currentTarget) dragState.currentTarget.classList.remove('drop-target');
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+            const fromCellEl = cellEls[dragState.fromIndex];
+            if (fromCellEl) {
+                const origItem = fromCellEl.querySelector('.item');
+                if (origItem) origItem.classList.remove('hidden');
+            }
+            dragState = null;
+        }
+        if (boosterDragState) {
+            try { boosterDragState.ghost && boosterDragState.ghost.remove(); } catch(e) {}
+            if (boosterDragState.currentTarget) boosterDragState.currentTarget.classList.remove('drop-target');
+            window.removeEventListener('pointermove', onInventoryPointerMove);
+            window.removeEventListener('pointerup', onInventoryPointerUp);
+            window.removeEventListener('pointercancel', onInventoryPointerUp);
+            boosterDragState = null;
+        }
+
+        if (shopOpen) closeShop();
+
+        // Не показываем оверлей «Пауза», если открыты настройки — они сами по себе пауза
+        if (!settingsOpen) pauseOverlay.classList.add('open');
+    }
+
+    function resumeGame() {
+        if (!paused) return;
+        if (settingsOpen) return;   // настройки сами снимут паузу при закрытии
+        paused = false;
+        pauseOverlay.classList.remove('open');
+
+        if (gameFinished) return;
+        if (transitionLock) return;
+        if (tutorialOpen) return;
+
+        const t = TASKS[currentTaskIndex];
+        if (!t) return;
+        if (timeLeft <= 0) return;
+
+        resumeMusic();
+
+        if (!timerHandle) {
+            timerHandle = setInterval(() => {
+                if (shopOpen || tutorialOpen || paused || settingsOpen || mergeInFlight) return;
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    updateTimerUI();
+                    clearInterval(timerHandle); timerHandle = null;
+                    runTaskFailCeremony();
+                } else {
+                    updateTimerUI();
+                    saveProgress();
+                }
+            }, 1000);
+        }
+
+        if (!loseCheckHandle) {
+            loseCheckHandle = setInterval(() => {
+                if (gameFinished || transitionLock || shopOpen || tutorialOpen || paused || settingsOpen) return;
+                checkLose();
+            }, LOSE_CHECK_INTERVAL_MS);
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) pauseGame();
+        else if (!settingsOpen) resumeGame();
+    });
+    window.addEventListener('blur',  () => pauseGame());
+    window.addEventListener('focus', () => { if (!settingsOpen) resumeGame(); });
+    pauseResume.addEventListener('click', () => {
+        try { window.focus(); } catch(e) {}
+        resumeGame();
+    });
+
+    // ================== НАСТРОЙКИ (UI) ==================
+    function openSettings() {
+        if (settingsOpen) return;
+        // ставим игру на паузу (если ещё не на паузе)
+        if (!paused) pauseGame();
+        settingsOpen = true;
+
+        // синхронизируем ползунки с текущими настройками
+        const musicPct = Math.round(settings.musicVolume * 100);
+        const sfxPct   = Math.round(settings.sfxVolume   * 100);
+        musicSlider.value = String(musicPct);
+        sfxSlider.value   = String(sfxPct);
+        musicValueEl.textContent = musicPct + '%';
+        sfxValueEl.textContent   = sfxPct + '%';
+        updateSliderFill(musicSlider, musicPct);
+        updateSliderFill(sfxSlider, sfxPct);
+
+        pauseOverlay.classList.remove('open');
+        settingsOverlay.classList.add('open');
+    }
+
+    function closeSettings() {
+        if (!settingsOpen) return;
+        settingsOpen = false;
+        settingsOverlay.classList.remove('open');
+        // снимаем паузу и возобновляем музыку/таймер
+        paused = false;
+        pauseOverlay.classList.remove('open');
+
+        if (gameFinished) return;
+        if (transitionLock) return;
+        if (tutorialOpen) return;
+        if (shopOpen) return;
+
+        resumeMusic();
+        if (timeLeft <= 0) return;
+        if (!timerHandle) {
+            timerHandle = setInterval(() => {
+                if (shopOpen || tutorialOpen || paused || settingsOpen || mergeInFlight) return;
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    updateTimerUI();
+                    clearInterval(timerHandle); timerHandle = null;
+                    runTaskFailCeremony();
+                } else {
+                    updateTimerUI();
+                    saveProgress();
+                }
+            }, 1000);
+        }
+        if (!loseCheckHandle) {
+            loseCheckHandle = setInterval(() => {
+                if (gameFinished || transitionLock || shopOpen || tutorialOpen || paused || settingsOpen) return;
+                checkLose();
+            }, LOSE_CHECK_INTERVAL_MS);
+        }
+    }
+
+    function updateSliderFill(slider, pct) {
+        const v = Math.max(0, Math.min(100, pct));
+        slider.style.background = `linear-gradient(90deg, #ffd166 0%, #ffd166 ${v}%, rgba(0,0,0,0.45) ${v}%, rgba(0,0,0,0.45) 100%)`;
+    }
+
+    settingsBtn.addEventListener('click', openSettings);
+    settingsClose.addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+
+    musicSlider.addEventListener('input', () => {
+        const pct = Number(musicSlider.value);
+        settings.musicVolume = pct / 100;
+        musicValueEl.textContent = pct + '%';
+        updateSliderFill(musicSlider, pct);
+        applyMusicVolume();
+        saveSettings();
+    });
+    sfxSlider.addEventListener('input', () => {
+        const pct = Number(sfxSlider.value);
+        settings.sfxVolume = pct / 100;
+        sfxValueEl.textContent = pct + '%';
+        updateSliderFill(sfxSlider, pct);
+        saveSettings();
+    });
+
+    settingsMute.addEventListener('click', () => {
+        settings.musicVolume = 0;
+        settings.sfxVolume = 0;
+        musicSlider.value = '0';
+        sfxSlider.value = '0';
+        musicValueEl.textContent = '0%';
+        sfxValueEl.textContent = '0%';
+        updateSliderFill(musicSlider, 0);
+        updateSliderFill(sfxSlider, 0);
+        applyMusicVolume();
+        saveSettings();
+    });
+
+    // ================== АДАПТАЦИЯ ==================
+    function updateBoardSize(rows, cols) {
+        boardEl.style.width = '';
+        boardEl.style.height = '';
+        const wrapEl = document.querySelector('.game-wrap');
+        wrapEl.style.width = '';
+
+        void boardEl.offsetHeight;
+
+        const hudEl  = document.querySelector('.hud-top');
+        const bottomEl = document.querySelector('.bottom-bar');
+
+        const wrapRect = wrapEl.getBoundingClientRect();
+        const hudH     = hudEl ? hudEl.getBoundingClientRect().height : 0;
+        const bottomH  = bottomEl ? bottomEl.getBoundingClientRect().height : 0;
+
+        const availableW = wrapRect.width;
+        const availableH = Math.max(120, wrapRect.height - hudH - bottomH - 24);
+
+        const isMobile = window.innerWidth <= 700;
+        const minCell = isMobile ? 34 : 44;
+        const maxCell = isMobile ? 68 : 96;
+        const gap     = isMobile ? 5  : 8;
+
+        const padding = gap;
+
+        const bottomMinW = bottomEl
+            ? (bottomEl.scrollWidth || bottomEl.offsetWidth || 0)
+            : 0;
+
+        const cellByW = (availableW - 2 * padding - (cols - 1) * gap) / cols;
+        const cellByH = (availableH - 2 * padding - (rows - 1) * gap) / rows;
+
+        let cell = Math.min(cellByW, cellByH);
+        cell = Math.max(minCell, Math.min(maxCell, cell));
+        cell = Math.floor(cell);
+
+        const gridW  = cols * cell + (cols - 1) * gap;
+        const gridH  = rows * cell + (rows - 1) * gap;
+        const boardW = gridW + 2 * padding;
+        const boardH = gridH + 2 * padding;
+
+        document.documentElement.style.setProperty('--cell-size', cell + 'px');
+        document.documentElement.style.setProperty('--item-size', Math.round(cell * 1.05) + 'px');
+        document.documentElement.style.setProperty('--cell-gap',  gap + 'px');
+        document.documentElement.style.setProperty('--field-cols', String(cols));
+
+        boardEl.style.width  = boardW + 'px';
+        boardEl.style.height = boardH + 'px';
+
+        const wrapW = Math.max(boardW, bottomMinW);
+        wrapEl.style.width = wrapW + 'px';
+    }
+
+    // ================== ПОЛЕ ==================
+    function setFieldColsUI(cols) {
+        document.documentElement.style.setProperty('--field-cols', String(cols));
+    }
+
+    function createField(rows, cols) {
+        ROWS = rows; COLS = cols;
+        TOTAL_CELLS = rows * cols;
+
+        fieldEl.innerHTML = '';
+        cellEls.length = 0;
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.index = i;
+            fieldEl.appendChild(cell);
+            cellEls.push(cell);
+        }
+
+        setFieldColsUI(cols);
+        updateBoardSize(rows, cols);
+    }
+
+    function bindFieldHandlers(spawnerIdx) {
+        if (window.__fieldAC) window.__fieldAC.abort();
+        window.__fieldAC = new AbortController();
+        const signal = window.__fieldAC.signal;
+
+        cellEls.forEach((cell, i) => {
+            cell.classList.toggle('spawner', i === spawnerIdx);
+            if (i === spawnerIdx) {
+                cell.addEventListener('click', onSpawnerClick, { signal });
+                cell.addEventListener('pointerdown', (e) => e.preventDefault(), { signal });
+            } else {
+                cell.addEventListener('pointerdown', (e) => {
+                    if (activeBooster && !shopOpen && !tutorialOpen && !paused && !settingsOpen) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleBoosterTap(i);
+                        return;
+                    }
+                    onPointerDown(e);
+                }, { signal });
+            }
+        });
+    }
+
+    function handleBoosterTap(index) {
+        if (paused || settingsOpen) return;
+        if (!activeBooster) return;
+        const cfg = BOOSTER_CFG[activeBooster];
+        if (!cfg) return;
+        if (index === spawnerIndex) return;
+
+        let ok;
+        if (!cfg.targetRequired) ok = applyBooster(activeBooster, null);
+        else                     ok = applyBooster(activeBooster, index);
+        if (ok) {
+            activeBooster = null;
+            renderInventory();
+        }
+    }
+
+    function pickSpawnerIndex(rows, cols) {
+        const candidates = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (r === 0 || r === rows-1 || c === 0 || c === cols-1) {
+                    candidates.push(r * cols + c);
+                }
+            }
+        }
+        const inner = candidates.filter(i => {
+            const r = Math.floor(i / cols);
+            const c = i % cols;
+            return !((r === 0 || r === rows-1) && (c === 0 || c === cols-1));
+        });
+        const pool = inner.length ? inner : candidates;
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    // ================== УСЛОЖНИТЕЛИ ==================
+    function obstacleAt(index) { return obstacles.find(o => o.index === index) || null; }
+    function hasObstacle(index) { return !!obstacleAt(index); }
+
+    function canPlaceObstacleAt(index) {
+        if (index === spawnerIndex) return false;
+        if (hasObstacle(index)) return false;
+        if (cells[index] > 0) return false;
+        return true;
+    }
+
+    function makeObstacleEl(type) {
+        const cfg = OBSTACLE_CFG[type];
+        const el = document.createElement('div');
+        el.className = 'obstacle';
+        const img = document.createElement('img');
+        img.src = `${IMG_PATH}/${cfg.img}${IMG_EXT}`;
+        img.alt = type;
+        img.onerror = () => {
+            img.remove();
+            const fb = document.createElement('div');
+            fb.className = 'fallback';
+            fb.textContent = cfg.fallback;
+            el.appendChild(fb);
+        };
+        el.appendChild(img);
+        return el;
+    }
+
+    function spawnObstacle(type, preferredIndex = null) {
+        let index = preferredIndex;
+        if (index === null || !canPlaceObstacleAt(index)) {
+            const candidates = [];
+            for (let i = 0; i < TOTAL_CELLS; i++) if (canPlaceObstacleAt(i)) candidates.push(i);
+            if (candidates.length === 0) return false;
+            index = candidates[Math.floor(Math.random() * candidates.length)];
+        }
+        const cfg = OBSTACLE_CFG[type];
+        obstacles.push({
+            type, index,
+            counter: 0,
+            cooldown: cfg.cooldown || 0
+        });
+        return true;
+    }
+
+    function tickObstacles() {
+        rockSlowSpawnCounter++;
+        if (rockSlowSpawnCounter >= ROCK_SLOW_SPAWN_EVERY) {
+            rockSlowSpawnCounter = 0;
+            if (spawnObstacle('rock_slow')) playGrow();
+        }
+
+        const snapshot = obstacles.slice();
+        let grewFastThisTurn = false;
+        let struckThisTurn = false;
+
+        for (const o of snapshot) {
+            if (!obstacles.includes(o)) continue;
+            if (o.type === 'rock_fast') {
+                if (!grewFastThisTurn) {
+                    if (growRockFast(o)) { grewFastThisTurn = true; playGrow(); }
+                }
+            } else if (o.type === 'slayer') {
+                o.cooldown--;
+                if (o.cooldown <= 0 && !struckThisTurn) {
+                    if (slayerStrike(o)) {
+                        o.cooldown = OBSTACLE_CFG.slayer.cooldown;
+                        struckThisTurn = true;
+                    } else {
+                        o.cooldown = 1;
+                    }
+                }
+            }
+        }
+
+        renderField();
+        saveProgress();
+        checkLose();
+    }
+
+    function growRockFast(rock) {
+        const row = Math.floor(rock.index / COLS);
+        const col = rock.index % COLS;
+        const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+        const free = [];
+        for (const [dr, dc] of dirs) {
+            const nr = row + dr, nc = col + dc;
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+            const ni = nr * COLS + nc;
+            if (canPlaceObstacleAt(ni)) free.push(ni);
+        }
+        if (free.length === 0) return false;
+        const ni = free[Math.floor(Math.random() * free.length)];
+
+        obstacles.push({ type: 'rock_fast', index: ni, counter: 0, cooldown: 0 });
+        cellEls[ni].animate(
+            [{ transform: 'scale(0.3)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
+            { duration: 260, easing: 'ease-out' }
+        );
+        return true;
+    }
+
+    function slayerStrike(slayer) {
+        const targets = [];
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            if (i === spawnerIndex) continue;
+            if (hasObstacle(i)) continue;
+            if (cells[i] > 0) targets.push(i);
+        }
+        if (targets.length === 0) return false;
+        const target = targets[Math.floor(Math.random() * targets.length)];
+
+        const fromR = cellEls[slayer.index].getBoundingClientRect();
+        const toR   = cellEls[target].getBoundingClientRect();
+        const x1 = fromR.left + fromR.width / 2;
+        const y1 = fromR.top  + fromR.height / 2;
+        const x2 = toR.left + toR.width / 2;
+        const y2 = toR.top  + toR.height / 2;
+
+        playZap();
+        drawLightning(x1, y1, x2, y2);
+
+        setTimeout(() => {
+            cells[target] = 0;
+            renderField();
+            saveProgress();
+        }, 180);
+        return true;
+    }
+
+    function drawLightning(x1, y1, x2, y2) {
+        const segments = 6;
+        const points = [{ x: x1, y: y1 }];
+        for (let i = 1; i < segments; i++) {
+            const t = i / segments;
+            const baseX = x1 + (x2 - x1) * t;
+            const baseY = y1 + (y2 - y1) * t;
+            const jitter = 18;
+            points.push({
+                x: baseX + (Math.random() - 0.5) * jitter,
+                y: baseY + (Math.random() - 0.5) * jitter
+            });
+        }
+        points.push({ x: x2, y: y2 });
+
+        const created = [];
+        for (let i = 0; i < points.length - 1; i++) {
+            const a = points[i], b = points[i + 1];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const len = Math.hypot(dx, dy);
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            const el = document.createElement('div');
+            el.className = 'bolt';
+            el.style.left = a.x + 'px';
+            el.style.top  = a.y + 'px';
+            el.style.width = len + 'px';
+            el.style.height = '4px';
+            el.style.transform = `rotate(${angle}deg)`;
+            document.body.appendChild(el);
+            created.push(el);
+        }
+        spawnParticles(x2, y2, 12, { colors: ['#ffffff','#c7f0ff','#7ee7ff'], dist: 70, gravity: 20 });
+        setTimeout(() => created.forEach(el => el.remove()), 250);
+
+        const flash = document.createElement('div');
+        flash.style.position = 'fixed';
+        flash.style.inset = '0';
+        flash.style.background = 'rgba(180,220,255,.35)';
+        flash.style.pointerEvents = 'none';
+        flash.style.zIndex = '1700';
+        document.body.appendChild(flash);
+        flash.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out' })
+             .onfinish = () => flash.remove();
+    }
+
+    // ================== ФАБРИКА ==================
+    function makeItemEl(level, kind = 'item') {
+        const el = document.createElement('div');
+        el.className = kind;
+        const img = document.createElement('img');
+        img.src = `${IMG_PATH}/item_${level}${IMG_EXT}`;
+        img.alt = `item ${level}`;
+        img.onerror = () => {
+            img.remove();
+            const fb = document.createElement('div');
+            fb.className = 'fallback';
+            fb.textContent = FALLBACK[level] || `?${level}`;
+            el.appendChild(fb);
+        };
+        el.appendChild(img);
+        return el;
+    }
+    function makeSpawnerArt() {
+        const item = document.createElement('div');
+        item.className = 'item';
+        const img = document.createElement('img');
+        img.src = `${IMG_PATH}/spawner${IMG_EXT}`;
+        img.alt = 'spawner';
+        img.onerror = () => {
+            img.remove();
+            const fb = document.createElement('div');
+            fb.className = 'fallback'; fb.textContent = '✨';
+            item.appendChild(fb);
+        };
+        item.appendChild(img);
+        return item;
+    }
+
+    // ================== РЕНДЕР ==================
+    function renderField() {
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            const cellEl = cellEls[i];
+            cellEl.innerHTML = '';
+            cellEl.classList.remove('filled', 'drop-target', 'obstacle', 'booster-target');
+
+            if (i === spawnerIndex) {
+                cellEl.classList.add('filled');
+                cellEl.appendChild(makeSpawnerArt());
+                continue;
+            }
+
+            const obs = obstacleAt(i);
+            if (obs) {
+                cellEl.classList.add('filled', 'obstacle');
+                cellEl.appendChild(makeObstacleEl(obs.type));
+                continue;
+            }
+
+            const level = cells[i];
+            if (level > 0) {
+                cellEl.classList.add('filled');
+                cellEl.appendChild(makeItemEl(level, 'item'));
+            }
+        }
+        updateCoinsUI();
+        updateEnergyUI();
+        updateTaskProgressUI();
+        renderInventory();
+    }
+
+    // ================== ПАРТИКЛЫ ==================
+    function spawnParticles(x, y, count = 14, opts = {}) {
+        const colors = opts.colors || ['#ffe27a','#ffb347','#fff7c2','#f7d86b'];
+        const baseDist = opts.dist || 70;
+        const gravity = opts.gravity != null ? opts.gravity : 40;
+        for (let i = 0; i < count; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            const size = 6 + Math.random() * 8;
+            p.style.width = size + 'px';
+            p.style.height = size + 'px';
+            p.style.left = (x - size/2) + 'px';
+            p.style.top  = (y - size/2) + 'px';
+            const c = colors[Math.floor(Math.random()*colors.length)];
+            p.style.background = `radial-gradient(circle at 35% 35%, #fff, ${c} 70%)`;
+            p.style.boxShadow = `0 0 10px ${c}`;
+            document.body.appendChild(p);
+
+            const angle = Math.random() * Math.PI * 2;
+            const dist  = baseDist * (0.5 + Math.random() * 0.9);
+            const dx = Math.cos(angle) * dist;
+            const dy = Math.sin(angle) * dist - 10;
+            const dur = 420 + Math.random() * 260;
+            const t0 = performance.now();
+
+            function frame(now) {
+                const t = Math.min(1, (now - t0) / dur);
+                const e = 1 - Math.pow(1 - t, 2);
+                const px = x + dx * e;
+                const py = y + dy * e + gravity * e * e;
+                p.style.left = (px - size/2) + 'px';
+                p.style.top  = (py - size/2) + 'px';
+                p.style.opacity = String(1 - t);
+                p.style.transform = `scale(${1 - 0.6 * t})`;
+                if (t < 1) requestAnimationFrame(frame);
+                else p.remove();
+            }
+            requestAnimationFrame(frame);
+        }
+    }
+
+    function fireworks(cx, cy, totalBursts = 5) {
+        const palette = [
+            ['#ff5e7e','#ffa8b8','#fff'],
+            ['#7ee7ff','#c7f0ff','#fff'],
+            ['#ffe27a','#fff7c2','#fff'],
+            ['#c8a2ff','#e5d4ff','#fff'],
+            ['#8effa0','#d4ffdc','#fff']
+        ];
+        for (let b = 0; b < totalBursts; b++) {
+            const ox = (Math.random() - 0.5) * 600;
+            const oy = (Math.random() - 0.5) * 400 - 60;
+            const delay = 120 + b * 200;
+            setTimeout(() => {
+                spawnParticles(cx + ox, cy + oy, 30, {
+                    colors: palette[b % palette.length],
+                    dist: 140, gravity: 80
+                });
+            }, delay);
+        }
+    }
+
+    // ================== ЗАДАНИЯ ==================
+    function checkTask() {
+        if (gameFinished || transitionLock) return;
+        const t = TASKS[currentTaskIndex];
+        if (!t) return;
+
+        if (taskProgress >= t.count) {
+            taskTextEl.innerHTML = `<b>Задание выполнено!</b>`;
+            runTaskCompleteCeremony();
+        }
+    }
+
+    function flyItemToProgressBar(level, fromCellIndex) {
+        const t = TASKS[currentTaskIndex];
+        if (!t || transitionLock) return;
+
+        const fromRect = cellEls[fromCellIndex].getBoundingClientRect();
+        const fromCX = fromRect.left + fromRect.width / 2;
+        const fromCY = fromRect.top  + fromRect.height / 2;
+
+        const barEl = document.getElementById('progressBar');
+        const barRect = barEl.getBoundingClientRect();
+        const toCX = barRect.left + barRect.width / 2;
+        const toCY = barRect.top  + barRect.height / 2;
+
+        const ghost = makeItemEl(level, 'flyer');
+        ghost.style.zIndex = '1900';
+        document.body.appendChild(ghost);
+
+        const itemSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size'));
+        const W = itemSize, H = itemSize;
+
+        ghost.style.left = (fromCX - W/2) + 'px';
+        ghost.style.top  = (fromCY - H/2) + 'px';
+        ghost.style.transform = 'scale(1)';
+        ghost.style.opacity = '1';
+
+        const ctrlX = (fromCX + toCX) / 2;
+        const ctrlY = Math.min(fromCY, toCY) - 120;
+
+        const dur = 520;
+        const t0 = performance.now();
+
+        function frame(now) {
+            const k = Math.min(1, (now - t0) / dur);
+            const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+
+            const mt = 1 - e;
+            const cx = mt*mt*fromCX + 2*mt*e*ctrlX + e*e*toCX;
+            const cy = mt*mt*fromCY + 2*mt*e*ctrlY + e*e*toCY;
+
+            ghost.style.left = (cx - W/2) + 'px';
+            ghost.style.top  = (cy - H/2) + 'px';
+
+            const sc = 1 - e * 0.65;
+            ghost.style.transform = `scale(${sc}) rotate(${e * 180}deg)`;
+
+            if (k < 1) requestAnimationFrame(frame);
+            else {
+                ghost.remove();
+                onProgressBarHit(barRect);
+            }
+        }
+        requestAnimationFrame(frame);
+    }
+
+    function onProgressBarHit(barRect) {
+        const t = TASKS[currentTaskIndex];
+        if (!t) return;
+
+        mergeInFlight = false;
+        taskProgress++;
+        if (taskProgress > t.count) taskProgress = t.count;
+
+        const cx = barRect.left + barRect.width / 2;
+        const cy = barRect.top  + barRect.height / 2;
+        spawnParticles(cx, cy, 16, {
+            colors: ['#ffd166','#fff3c4','#ffe27a','#ffffff'],
+            dist: 70, gravity: 40
+        });
+
+        const textEl = document.getElementById('taskProgress');
+        if (textEl) {
+            textEl.animate(
+                [
+                    { transform: 'scale(1)' },
+                    { transform: 'scale(1.6)', filter: 'brightness(1.5)' },
+                    { transform: 'scale(1)',   filter: 'brightness(1)' }
+                ],
+                { duration: 500, easing: 'ease-out' }
+            );
+        }
+
+        updateTaskProgressUI();
+        playCoin();
+
+        setTimeout(() => { checkTask(); }, 500);
+    }
+
+    function hasAnyMergeAvailable() {
+        const counts = {};
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            if (i === spawnerIndex) continue;
+            if (hasObstacle(i)) continue;
+            const lvl = cells[i];
+            if (lvl > 0 && lvl < MAX_LEVEL) {
+                counts[lvl] = (counts[lvl] || 0) + 1;
+                if (counts[lvl] >= 2) return true;
+            }
+        }
+        return false;
+    }
+
+    function hasAnyFreeCell() {
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            if (i === spawnerIndex) continue;
+            if (hasObstacle(i)) continue;
+            if (cells[i] === 0) return true;
+        }
+        return false;
+    }
+
+    function hasAnyOccupiedCell() {
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            if (i === spawnerIndex) continue;
+            if (hasObstacle(i)) return true;
+            if (cells[i] > 0) return true;
+        }
+        return false;
+    }
+
+    function canProgress() {
+        const t = TASKS[currentTaskIndex];
+        if (!t) return true;
+        if (taskProgress >= t.count) return true;
+
+        if (inventory.cleaner > 0 && obstacles.length > 0) return true;
+        if ((inventory.bomb > 0 || inventory.mega > 0) && hasAnyOccupiedCell()) return true;
+
+        if (energy >= SPAWN_COST && hasAnyFreeCell()) return true;
+        if (hasAnyMergeAvailable()) return true;
+
+        return false;
+    }
+
+    function checkLose() {
+        if (gameFinished || transitionLock) return;
+        if (mergeInFlight) return;
+        const t = TASKS[currentTaskIndex];
+        if (!t) return;
+        if (taskProgress >= t.count) return;
+        if (!canProgress()) runTaskFailCeremony();
+    }
+
+    function getHeroScreenPos() {
+        const styles = getComputedStyle(document.documentElement);
+        const toastH = parseFloat(styles.getPropertyValue('--toast-h')) || 720;
+        const liftVh = parseFloat(styles.getPropertyValue('--toast-lift')) || 8;
+        const lift = window.innerHeight * (liftVh / 100);
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight - lift - toastH * 0.45;
+        return { cx, cy };
+    }
+
+    function runTaskCompleteCeremony() {
+        if (transitionLock) return;
+        transitionLock = true;
+        const t = TASKS[currentTaskIndex];
+
+        if (t) {
+            if (t.rewardEnergy) {
+                energy += t.rewardEnergy;
+                updateEnergyUI();
+                energyTextEl.parentElement.animate(
+                    [{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }],
+                    { duration: 500, easing: 'ease-out' }
+                );
+            }
+            if (t.rewardCoins) {
+                coins += t.rewardCoins;
+                updateCoinsUI();
+                coinsTextEl.parentElement.animate(
+                    [{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }],
+                    { duration: 500, easing: 'ease-out' }
+                );
+            }
+        }
+
+        playFanfare();
+        toastHero.classList.remove('leaving');
+        toastHero.classList.add('visible');
+
+        const { cx, cy } = getHeroScreenPos();
+        const fwDelay = 700, winDur = 2400, leaveDur = 700;
+
+        setTimeout(() => {
+            const styles = getComputedStyle(document.documentElement);
+            const toastH = parseFloat(styles.getPropertyValue('--toast-h')) || 720;
+            fireworks(cx, cy - toastH * 0.25, 6);
+        }, fwDelay);
+
+        setTimeout(() => {
+            toastHero.classList.remove('visible');
+            toastHero.classList.add('leaving');
+        }, winDur);
+
+        setTimeout(() => {
+            toastHero.classList.remove('leaving');
+            goToNextTask();
+            transitionLock = false;
+        }, winDur + leaveDur);
+    }
+
+    function runTaskFailCeremony() {
+        if (transitionLock) return;
+        transitionLock = true;
+
+        taskTextEl.innerHTML = `<b>Не получилось!</b>`;
+        playSadTune();
+
+        toastHeroSad.classList.remove('leaving');
+        toastHeroSad.classList.add('visible');
+
+        const loseDur = 1800, leaveDur = 700;
+
+        setTimeout(() => {
+            toastHeroSad.classList.remove('visible');
+            toastHeroSad.classList.add('leaving');
+        }, loseDur);
+
+        setTimeout(() => {
+            toastHeroSad.classList.remove('leaving');
+            transitionLock = false;
+            retryCurrentTask();
+        }, loseDur + leaveDur);
+    }
+
+    function takeTaskSnapshot() {
+        taskStartSnapshot = {
+            coins: coins,
+            energy: energy,
+            inventory: { ...inventory }
+        };
+    }
+
+    function restoreTaskSnapshot() {
+        if (!taskStartSnapshot) return;
+        coins = taskStartSnapshot.coins;
+        energy = taskStartSnapshot.energy;
+        inventory = { ...taskStartSnapshot.inventory };
+        updateCoinsUI();
+        updateEnergyUI();
+        renderInventory();
+    }
+
+    function retryCurrentTask() {
+        if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+        if (loseCheckHandle) { clearInterval(loseCheckHandle); loseCheckHandle = null; }
+
+        closeShop();
+        activeBooster = null;
+
+        toastHero.classList.remove('visible', 'leaving');
+        toastHeroSad.classList.remove('visible', 'leaving');
+
+        restoreTaskSnapshot();
+        startTask(currentTaskIndex);
+    }
+
+    function goToNextTask() {
+        if (loseCheckHandle) { clearInterval(loseCheckHandle); loseCheckHandle = null; }
+
+        currentTaskIndex++;
+        if (currentTaskIndex >= TASKS.length) {
+            gameFinished = true;
+            clearInterval(timerHandle); timerHandle = null;
+            timerTextEl.textContent = '00:00';
+            taskTextEl.innerHTML = `🏆 <b>Все задания выполнены!</b>`;
+            taskProgEl.textContent = 'Победа!';
+            clearSave();
+            return;
+        }
+        startTask(currentTaskIndex);
+    }
+
+    function startTaskReal(t) {
+        mergeInFlight = false;
+        if (timerHandle) clearInterval(timerHandle);
+        timeLeft = t.seconds;
+        updateTimerUI();
+        timerHandle = setInterval(() => {
+            if (shopOpen || tutorialOpen || paused || settingsOpen || mergeInFlight) return;
+            timeLeft--;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                updateTimerUI();
+                clearInterval(timerHandle); timerHandle = null;
+                runTaskFailCeremony();
+            } else {
+                updateTimerUI();
+                saveProgress();
+            }
+        }, 1000);
+
+        renderField();
+        taskProgress = 0;
+        updateTaskProgressUI();
+        checkTask();
+        checkLose();
+        saveProgress();
+
+        loseCheckHandle = setInterval(() => {
+            if (gameFinished || transitionLock || shopOpen || tutorialOpen || paused || settingsOpen) return;
+            checkLose();
+        }, LOSE_CHECK_INTERVAL_MS);
+    }
+
+    function startTask(idx) {
+        currentTaskIndex = idx;
+        const t = TASKS[idx];
+        if (!t) return;
+        takeTaskSnapshot();
+
+        if (loseCheckHandle) { clearInterval(loseCheckHandle); loseCheckHandle = null; }
+
+        refreshTaskText();
+
+        const newRows = t.rows, newCols = t.cols;
+        const sizeChanged = (newRows !== ROWS || newCols !== COLS);
+
+        if (sizeChanged) {
+            ROWS = newRows; COLS = newCols;
+            TOTAL_CELLS = ROWS * COLS;
+            cells = new Array(TOTAL_CELLS).fill(0);
+            createField(ROWS, COLS);
+        } else {
+            cells.fill(0);
+            updateBoardSize(ROWS, COLS);
+        }
+        obstacles = [];
+        rockSlowSpawnCounter = 0;
+
+        spawnerIndex = pickSpawnerIndex(ROWS, COLS);
+        bindFieldHandlers(spawnerIndex);
+        setFieldColsUI(COLS);
+
+        const allEmpty = [];
+        for (let i = 0; i < TOTAL_CELLS; i++) if (i !== spawnerIndex) allEmpty.push(i);
+        for (let i = allEmpty.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allEmpty[i], allEmpty[j]] = [allEmpty[j], allEmpty[i]];
+        }
+        if (allEmpty[0] !== undefined) cells[allEmpty[0]] = 1;
+        if (allEmpty[1] !== undefined) cells[allEmpty[1]] = 1;
+        if (allEmpty[2] !== undefined) cells[allEmpty[2]] = 1;
+        if (allEmpty[3] !== undefined) cells[allEmpty[3]] = 2;
+
+        const typesForThisTask = t.obstacles || [];
+        for (const type of typesForThisTask) spawnObstacle(type);
+
+        renderField();
+        taskProgress = 0;
+        updateTaskProgressUI();
+
+        if (t.tutorial && TUTORIALS[t.tutorial] && !shownTutorials[t.tutorial]) {
+            if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+            shownTutorials[t.tutorial] = true;
+            showTutorial(t.tutorial, () => startTaskReal(t));
+        } else {
+            startTaskReal(t);
+        }
+    }
+
+    // ================== СПАВНЕР ==================
+    function onSpawnerClick() {
+        if (spawning || gameFinished || transitionLock || shopOpen || tutorialOpen || paused || settingsOpen) return;
+        if (activeBooster) return;
+
+        if (energy < SPAWN_COST) {
+            energyTextEl.parentElement.animate(
+                [{ transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' }],
+                { duration: 220 }
+            );
+            cellEls[spawnerIndex].animate(
+                [
+                    { filter: 'brightness(1)' },
+                    { filter: 'brightness(1.6) hue-rotate(180deg) saturate(2)' },
+                    { filter: 'brightness(1)' }
+                ],
+                { duration: 300, easing: 'ease-out', fill: 'none' }
+            );
+            checkLose();
+            return;
+        }
+
+        const empties = [];
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            if (i === spawnerIndex) continue;
+            if (hasObstacle(i)) continue;
+            if (cells[i] === 0) empties.push(i);
+        }
+        if (empties.length === 0) { checkLose(); return; }
+
+        const spawnerAnim = cellEls[spawnerIndex].animate(
+            [
+                { transform: 'scale(1)' }, { transform: 'scale(1.18)' },
+                { transform: 'scale(0.94)' }, { transform: 'scale(1.06)' },
+                { transform: 'scale(1)' }
+            ],
+            { duration: 320, easing: 'ease-out', fill: 'none' }
+        );
+        spawnerAnim.onfinish = () => spawnerAnim.cancel();
+
+        spawning = true;
+        energy -= SPAWN_COST;
+        updateEnergyUI();
+
+        const targetIndex = empties[Math.floor(Math.random() * empties.length)];
+        const spRect = cellEls[spawnerIndex].getBoundingClientRect();
+        const spCX = spRect.left + spRect.width / 2;
+        const spCY = spRect.top  + spRect.height / 2;
+        const tgtRect = cellEls[targetIndex].getBoundingClientRect();
+        const tgtCX = tgtRect.left + tgtRect.width / 2;
+        const tgtCY = tgtRect.top  + tgtRect.height / 2;
+
+        spawnParticles(spCX, spCY, 18, {
+            colors: ['#ffe27a','#ffb347','#fff7c2','#f7d86b','#ffd166'],
+            dist: 80
+        });
+        playSpawn();
+
+        const ghost = makeItemEl(1, 'flyer');
+        document.body.appendChild(ghost);
+        const itemSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size'));
+        const W = itemSize, H = itemSize;
+
+        ghost.style.zIndex = '5';
+        ghost.style.left = (spCX - W/2) + 'px';
+        ghost.style.top  = (spCY - H/2) + 'px';
+        ghost.style.transform = 'scale(0.05)';
+        ghost.style.opacity = '0.15';
+
+        const ctrlX = (spCX + tgtCX) / 2;
+        const ctrlY = Math.min(spCY, tgtCY) - 110;
+        const dur = 410;
+        const t0 = performance.now();
+
+        function frame(now) {
+            const t = Math.min(1, (now - t0) / dur);
+            const e = 1 - Math.pow(1 - t, 3);
+            const mt = 1 - e;
+            const cx = mt*mt*spCX + 2*mt*e*ctrlX + e*e*tgtCX;
+            const cy = mt*mt*spCY + 2*mt*e*ctrlY + e*e*tgtCY;
+
+            ghost.style.left = (cx - W/2) + 'px';
+            ghost.style.top  = (cy - H/2) + 'px';
+
+            let sc;
+            if (t < 0.25) sc = 0.05 + (t/0.25) * 0.95;
+            else          sc = 1 + Math.sin((t - 0.25) * Math.PI) * 0.08;
+
+            ghost.style.transform = `scale(${sc})`;
+            ghost.style.opacity = String(Math.min(1, t * 4));
+            if (t > 0.3) ghost.style.zIndex = '1000';
+
+            if (t < 1) {
+                requestAnimationFrame(frame);
+            } else {
+                ghost.remove();
+                cells[targetIndex] = 1;
+                renderField();
+                cellEls[targetIndex].animate(
+                    [{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }],
+                    { duration: 180, easing: 'ease-out' }
+                );
+                spawning = false;
+                tickObstacles();
+                checkLose();
+                saveProgress();
+            }
+        }
+        requestAnimationFrame(frame);
+    }
+
+    // ================== DRAG ==================
+    function onPointerDown(e) {
+        if (shopOpen || tutorialOpen || paused || settingsOpen) return;
+        if (activeBooster) return;
+        const cellEl = e.currentTarget;
+        const index = Number(cellEl.dataset.index);
+        if (index === spawnerIndex) return;
+        if (hasObstacle(index)) return;
+        if (cells[index] === 0) return;
+        if (dragState) return;
+        if (gameFinished || transitionLock) return;
+
+        e.preventDefault();
+        cellEl.setPointerCapture(e.pointerId);
+
+        const level = cells[index];
+        const itemInCell = cellEl.querySelector('.item');
+        if (itemInCell) itemInCell.classList.add('hidden');
+
+        const rect = cellEl.getBoundingClientRect();
+        const itemSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--item-size'));
+        const offsetX = (rect.width - itemSize) / 2;
+        const offsetY = (rect.height - itemSize) / 2;
+
+        const ghost = makeItemEl(level, 'flyer drag-ghost');
+        ghost.style.left = (rect.left + offsetX) + 'px';
+        ghost.style.top  = (rect.top  + offsetY) + 'px';
+        document.body.appendChild(ghost);
+
+        dragState = {
+            fromIndex: index,
+            ghost, pointerId: e.pointerId,
+            startX: e.clientX, startY: e.clientY,
+            startLeft: rect.left + offsetX, startTop: rect.top + offsetY,
+            moved: false, currentTarget: null
+        };
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+        if (!dragState || e.pointerId !== dragState.pointerId) return;
+        dragState.moved = true;
+
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        dragState.ghost.style.left = (dragState.startLeft + dx) + 'px';
+        dragState.ghost.style.top  = (dragState.startTop  + dy) + 'px';
+
+        const target = findCellUnderPointer(e.clientX, e.clientY);
+        if (dragState.currentTarget && dragState.currentTarget !== target) {
+            dragState.currentTarget.classList.remove('drop-target');
+        }
+        if (target && target !== cellEls[dragState.fromIndex]
+            && Number(target.dataset.index) !== spawnerIndex
+            && !hasObstacle(Number(target.dataset.index))) {
+            target.classList.add('drop-target');
+            dragState.currentTarget = target;
+        } else {
+            dragState.currentTarget = null;
+        }
+    }
+
+    function onPointerUp(e) {
+        if (!dragState || e.pointerId !== dragState.pointerId) return;
+        const { fromIndex, ghost, moved, currentTarget } = dragState;
+        ghost.remove();
+
+        const fromCellEl = cellEls[fromIndex];
+        const origItem = fromCellEl.querySelector('.item');
+        if (origItem) origItem.classList.remove('hidden');
+        if (currentTarget) currentTarget.classList.remove('drop-target');
+
+        const target = findCellUnderPointer(e.clientX, e.clientY);
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+
+        const fromIdx = fromIndex;
+        dragState = null;
+
+        if (!moved || !target) { renderField(); return; }
+
+        const targetIndex = Number(target.dataset.index);
+        if (targetIndex === fromIdx) { renderField(); return; }
+        if (targetIndex === spawnerIndex) { renderField(); return; }
+        if (hasObstacle(targetIndex)) { renderField(); return; }
+
+        const fromLevel = cells[fromIdx];
+        const toLevel   = cells[targetIndex];
+        let didAction = false;
+
+        if (toLevel === 0) {
+            cells[targetIndex] = fromLevel;
+            cells[fromIdx] = 0;
+            renderField();
+            cellEls[targetIndex].animate(
+                [{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }],
+                { duration: 180, easing: 'ease-out' }
+            );
+            didAction = true;
+        } else if (toLevel === fromLevel && fromLevel < MAX_LEVEL) {
+            const newLevel = fromLevel + 1;
+            const t = TASKS[currentTaskIndex];
+
+            if (t && newLevel >= t.level && taskProgress < t.count) {
+                mergeInFlight = true;
+                cells[fromIdx] = 0;
+                cells[targetIndex] = 0;
+                renderField();
+                playMerge();
+
+                const r = cellEls[targetIndex].getBoundingClientRect();
+                spawnParticles(r.left + r.width/2, r.top + r.height/2, 16, {
+                    colors: ['#ffd9f0','#c7f0ff','#fff2b0','#ffb347'], dist: 60
+                });
+
+                cellEls[targetIndex].animate(
+                    [
+                        { transform: 'scale(1)',    filter: 'brightness(1)' },
+                        { transform: 'scale(1.35)', filter: 'brightness(1.6)' },
+                        { transform: 'scale(1)',    filter: 'brightness(1)' }
+                    ],
+                    { duration: 320, easing: 'ease-out' }
+                );
+
+                flyItemToProgressBar(newLevel, targetIndex);
+                didAction = true;
+            } else {
+                cells[targetIndex] = newLevel;
+                cells[fromIdx] = 0;
+                renderField();
+                playMerge();
+
+                const r = cellEls[targetIndex].getBoundingClientRect();
+                spawnParticles(r.left + r.width/2, r.top + r.height/2, 16, {
+                    colors: ['#ffd9f0','#c7f0ff','#fff2b0','#ffb347'], dist: 60
+                });
+
+                const styles = getComputedStyle(document.documentElement);
+                const mergeScale      = parseFloat(styles.getPropertyValue('--merge-scale'))      || 1.35;
+                const mergeBrightness = parseFloat(styles.getPropertyValue('--merge-brightness')) || 1.6;
+                const mergeDuration   = parseFloat(styles.getPropertyValue('--merge-duration'))   || 320;
+
+                cellEls[targetIndex].animate(
+                    [
+                        { transform: 'scale(1)',    filter: 'brightness(1)' },
+                        { transform: `scale(${mergeScale})`, filter: `brightness(${mergeBrightness})` },
+                        { transform: 'scale(1)',    filter: 'brightness(1)' }
+                    ],
+                    { duration: mergeDuration, easing: 'ease-out' }
+                );
+                didAction = true;
+            }
+        } else {
+            renderField();
+        }
+
+        if (didAction) {
+            tickObstacles();
+            checkLose();
+            saveProgress();
+        }
+    }
+
+    function findCellUnderPointer(clientX, clientY) {
+        for (let i = 0; i < cellEls.length; i++) {
+            const r = cellEls[i].getBoundingClientRect();
+            if (clientX >= r.left && clientX <= r.right &&
+                clientY >= r.top  && clientY <= r.bottom) return cellEls[i];
+        }
+        return null;
+    }
+
+    // ================== БУСТЕРЫ ==================
+    function applyBooster(boosterId, targetIndex) {
+        if (paused || settingsOpen) return false;
+        if (!BOOSTER_CFG[boosterId]) return false;
+        if (inventory[boosterId] <= 0) return false;
+
+        const toClear = new Set();
+        const rows = ROWS, cols = COLS;
+
+        if (boosterId === 'bomb' && targetIndex != null) {
+            const r = Math.floor(targetIndex / cols);
+            const c = targetIndex % cols;
+            const offsets = [[0,0],[0,-1],[0,1],[-1,0],[1,0]];
+            for (const [dr, dc] of offsets) {
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                    const ni = nr * cols + nc;
+                    if (ni !== spawnerIndex) toClear.add(ni);
+                }
+            }
+        } else if (boosterId === 'mega' && targetIndex != null) {
+            const r = Math.floor(targetIndex / cols);
+            const c = targetIndex % cols;
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                        const ni = nr * cols + nc;
+                        if (ni !== spawnerIndex) toClear.add(ni);
+                    }
+                }
+            }
+        } else if (boosterId === 'cleaner') {
+            for (const o of obstacles) {
+                if (o.index !== spawnerIndex) toClear.add(o.index);
+            }
+            for (const idx of toClear) {
+                obstacles = obstacles.filter(o => o.index !== idx);
+            }
+            playBoom();
+            for (const idx of toClear) {
+                const r = cellEls[idx].getBoundingClientRect();
+                spawnParticles(r.left + r.width/2, r.top + r.height/2, 14, {
+                    colors: ['#c8a2ff','#e5d4ff','#fff'], dist: 60, gravity: 40
+                });
+            }
+            inventory[boosterId]--;
+            renderField();
+            checkLose();
+            saveProgress();
+            return true;
+        }
+
+        if (toClear.size === 0) return false;
+
+        for (const idx of toClear) {
+            cells[idx] = 0;
+            obstacles = obstacles.filter(o => o.index !== idx);
+        }
+
+        playBoom();
+        const targetRect = cellEls[targetIndex].getBoundingClientRect();
+        spawnParticles(targetRect.left + targetRect.width/2, targetRect.top + targetRect.height/2, 26, {
+            colors: boosterId === 'mega'
+                ? ['#ff5e7e','#ffa8b8','#fff','#ffb347']
+                : ['#ffe27a','#ffb347','#fff'],
+            dist: boosterId === 'mega' ? 130 : 90,
+            gravity: 90
+        });
+        cellEls[targetIndex].animate(
+            [{ transform: 'scale(1.3)' }, { transform: 'scale(1)' }],
+            { duration: 240, easing: 'ease-out' }
+        );
+
+        inventory[boosterId]--;
+        renderField();
+        checkLose();
+        saveProgress();
+        return true;
+    }
+
+    function renderInventory() {
+        inventoryEl.innerHTML = '';
+        for (const id of ['bomb','mega','cleaner']) {
+            const cfg = BOOSTER_CFG[id];
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot' + (inventory[id] === 0 ? ' empty' : '')
+                                      + (activeBooster === id ? ' active' : '');
+            slot.dataset.booster = id;
+            slot.title = `${cfg.name} — ${cfg.desc}`;
+
+            const img = document.createElement('img');
+            img.src = `${IMG_PATH}/${cfg.img}${IMG_EXT}`;
+            img.alt = cfg.name;
+            img.onerror = () => {
+                img.remove();
+                const fb = document.createElement('span');
+                fb.className = 'icon-fallback';
+                fb.textContent = cfg.fallback;
+                slot.insertBefore(fb, slot.firstChild);
+            };
+            slot.appendChild(img);
+
+            const count = document.createElement('span');
+            count.className = 'inv-count';
+            count.textContent = inventory[id];
+            slot.appendChild(count);
+
+            slot.addEventListener('pointerdown', (e) => onInventoryPointerDown(e, id));
+            slot.addEventListener('click', (e) => {
+                if (slot.dataset.dragged === '1') {
+                    slot.dataset.dragged = '0';
+                    return;
+                }
+                onInventoryClick(id);
+            });
+
+            inventoryEl.appendChild(slot);
+        }
+    }
+
+    function onInventoryClick(id) {
+        if (shopOpen || tutorialOpen || paused || settingsOpen) return;
+        if (inventory[id] <= 0) return;
+        if (gameFinished || transitionLock) return;
+
+        const cfg = BOOSTER_CFG[id];
+        if (cfg.targetRequired) {
+            activeBooster = (activeBooster === id) ? null : id;
+            renderInventory();
+        } else {
+            applyBooster(id, null);
+            renderInventory();
+        }
+    }
+
+    let boosterDragState = null;
+
+    function onInventoryPointerDown(e, id) {
+        if (shopOpen || tutorialOpen || paused || settingsOpen) return;
+        if (gameFinished || transitionLock) return;
+        if (inventory[id] <= 0) return;
+
+        e.preventDefault();
+        const slot = e.currentTarget;
+        slot.dataset.dragged = '0';
+
+        const cfg = BOOSTER_CFG[id];
+        const rect = slot.getBoundingClientRect();
+
+        boosterDragState = {
+            id,
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            offsetX: e.clientX - rect.left,
+            offsetY: e.clientY - rect.top,
+            ghost: null,
+            moved: false,
+            slot
+        };
+
+        const ghost = document.createElement('div');
+        ghost.className = 'flyer drag-ghost';
+        ghost.style.zIndex = '1800';
+        ghost.style.opacity = '0';
+        ghost.style.pointerEvents = 'none';
+
+        const img = document.createElement('img');
+        img.src = `${IMG_PATH}/${cfg.img}${IMG_EXT}`;
+        img.alt = cfg.name;
+        img.onerror = () => {
+            img.remove();
+            const fb = document.createElement('div');
+            fb.className = 'fallback';
+            fb.textContent = cfg.fallback;
+            ghost.appendChild(fb);
+        };
+        ghost.appendChild(img);
+
+        document.body.appendChild(ghost);
+        boosterDragState.ghost = ghost;
+
+        window.addEventListener('pointermove', onInventoryPointerMove);
+        window.addEventListener('pointerup', onInventoryPointerUp);
+        window.addEventListener('pointercancel', onInventoryPointerUp);
+    }
+
+    function onInventoryPointerMove(e) {
+        if (!boosterDragState || e.pointerId !== boosterDragState.pointerId) return;
+
+        const dx = e.clientX - boosterDragState.startX;
+        const dy = e.clientY - boosterDragState.startY;
+
+        if (!boosterDragState.moved) {
+            if (Math.hypot(dx, dy) < 6) return;
+            boosterDragState.moved = true;
+            boosterDragState.slot.dataset.dragged = '1';
+            boosterDragState.ghost.style.opacity = '1';
+        }
+
+        boosterDragState.ghost.style.left = (e.clientX - boosterDragState.offsetX) + 'px';
+        boosterDragState.ghost.style.top  = (e.clientY - boosterDragState.offsetY) + 'px';
+
+        const target = findCellUnderPointer(e.clientX, e.clientY);
+        if (boosterDragState.currentTarget && boosterDragState.currentTarget !== target) {
+            boosterDragState.currentTarget.classList.remove('drop-target');
+        }
+        if (target && Number(target.dataset.index) !== spawnerIndex) {
+            target.classList.add('drop-target');
+            boosterDragState.currentTarget = target;
+        } else {
+            boosterDragState.currentTarget = null;
+        }
+    }
+
+    function onInventoryPointerUp(e) {
+        if (!boosterDragState || e.pointerId !== boosterDragState.pointerId) return;
+
+        const { id, ghost, moved, currentTarget, slot } = boosterDragState;
+
+        if (ghost) ghost.remove();
+        if (currentTarget) currentTarget.classList.remove('drop-target');
+
+        window.removeEventListener('pointermove', onInventoryPointerMove);
+        window.removeEventListener('pointerup', onInventoryPointerUp);
+        window.removeEventListener('pointercancel', onInventoryPointerUp);
+
+        if (!moved) { boosterDragState = null; return; }
+
+        const target = findCellUnderPointer(e.clientX, e.clientY);
+        if (target) {
+            const index = Number(target.dataset.index);
+            if (index !== spawnerIndex) {
+                const cfg = BOOSTER_CFG[id];
+                let ok = false;
+                if (!cfg.targetRequired) ok = applyBooster(id, null);
+                else                     ok = applyBooster(id, index);
+                if (ok) activeBooster = null;
+            }
+        }
+
+        setTimeout(() => { slot.dataset.dragged = '0'; }, 0);
+        boosterDragState = null;
+        renderInventory();
+    }
+
+    // ================== МАГАЗИН ==================
+    function openShop() {
+    if (gameFinished || transitionLock || tutorialOpen || paused || settingsOpen) return;
+    shopOpen = true;
+    activeBooster = null;
+    renderInventory();
+    shopOverlay.classList.add('open');
+    renderShopList();
+    renderCoinPacks();       // <-- добавить
+    syncPurchasedCoins();    // <-- добавить
+}
+    function closeShop() {
+        shopOpen = false;
+        shopOverlay.classList.remove('open');
+    }
+
+    function renderShopList() {
+        shopListEl.innerHTML = '';
+        for (const id of ['bomb','mega','cleaner']) {
+            const cfg = BOOSTER_CFG[id];
+            const item = document.createElement('div');
+            item.className = 'shop-item';
+
+            const iconBox = document.createElement('div');
+            iconBox.className = 'shop-item-icon';
+            const img = document.createElement('img');
+            img.src = `${IMG_PATH}/${cfg.img}${IMG_EXT}`;
+            img.alt = cfg.name;
+            img.onerror = () => {
+                img.remove();
+                const fb = document.createElement('span');
+                fb.className = 'icon-fallback';
+                fb.textContent = cfg.fallback;
+                iconBox.appendChild(fb);
+            };
+            iconBox.appendChild(img);
+
+            const info = document.createElement('div');
+            info.className = 'shop-item-info';
+            info.innerHTML = `<h4>${cfg.name}</h4><p>${cfg.desc}</p>`;
+
+            const buyBtn = document.createElement('button');
+            buyBtn.className = 'shop-item-buy';
+
+            const priceSpan = document.createElement('span');
+            priceSpan.textContent = cfg.price;
+            buyBtn.appendChild(priceSpan);
+
+            const coinImg = document.createElement('img');
+            coinImg.src = `${IMG_PATH}/coin${IMG_EXT}`;
+            coinImg.alt = 'coin';
+            coinImg.className = 'shop-coin-icon';
+            coinImg.onerror = () => {
+                coinImg.remove();
+                const fb = document.createElement('span');
+                fb.textContent = '🪙';
+                fb.style.fontSize = '16px';
+                buyBtn.appendChild(fb);
+            };
+            buyBtn.appendChild(coinImg);
+
+            buyBtn.disabled = coins < cfg.price;
+            buyBtn.addEventListener('click', () => buyBooster(id));
+
+            item.appendChild(iconBox);
+            item.appendChild(info);
+            item.appendChild(buyBtn);
+            shopListEl.appendChild(item);
+        }
+    }
+
+// ================== ПОКУПКА МОНЕТ ЗА ЗВЁЗДЫ ==================
+const COIN_PACKS = [
+    { id: 'small',  stars: 5,  coins: 100,  label: '100 монет'  },
+    { id: 'medium', stars: 20, coins: 500,  label: '500 монет'  },
+    { id: 'large',  stars: 50, coins: 1500, label: '1500 монет' },
+];
+const API_URL = 'api.php';
+
+function getTelegramUserId() {
+    const tg = window.Telegram?.WebApp;
+    return tg?.initDataUnsafe?.user?.id || 0;
+}
+
+function renderCoinPacks() {
+    const list = document.getElementById('coinPacksList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    for (const pack of COIN_PACKS) {
+        const item = document.createElement('div');
+        item.className = 'shop-item';
+
+        const iconBox = document.createElement('div');
+        iconBox.className = 'shop-item-icon';
+        const img = document.createElement('img');
+        img.src = `${IMG_PATH}/coin.png`;
+        img.alt = 'coin';
+        img.onerror = () => {
+            img.remove();
+            const fb = document.createElement('span');
+            fb.className = 'icon-fallback';
+            fb.textContent = '🪙';
+            iconBox.appendChild(fb);
+        };
+        iconBox.appendChild(img);
+
+        const info = document.createElement('div');
+        info.className = 'shop-item-info';
+        info.innerHTML = `<h4>${pack.label}</h4><p>Пополнение игрового баланса</p>`;
+
+        const buyBtn = document.createElement('button');
+        buyBtn.className = 'shop-item-buy';
+        buyBtn.innerHTML = `<span>${pack.stars}</span> ⭐`;
+        buyBtn.addEventListener('click', () => buyCoinPack(pack.id));
+
+        item.appendChild(iconBox);
+        item.appendChild(info);
+        item.appendChild(buyBtn);
+        list.appendChild(item);
+    }
+}
+
+async function buyCoinPack(packId) {
+    const tg = window.Telegram?.WebApp;
+    const userId = getTelegramUserId();
+    if (!userId) {
+        alert('Открой игру через Telegram, чтобы купить монеты.');
+        return;
+    }
+
+    try {
+        const res = await fetch(API_URL + '?action=create_invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pack: packId, user_id: userId }),
+        });
+        const data = await res.json();
+        if (!data.ok || !data.url) {
+            alert('Не удалось создать счёт: ' + (data.error || 'неизвестная ошибка'));
+            return;
+        }
+
+        if (tg && tg.openInvoice) {
+            tg.openInvoice(data.url, (status) => {
+                if (status === 'paid') {
+                    setTimeout(syncPurchasedCoins, 1500);
+                }
+            });
+        } else {
+            window.open(data.url, '_blank');
+        }
+    } catch (e) {
+        alert('Ошибка соединения с сервером: ' + e.message);
+    }
+}
+
+async function syncPurchasedCoins() {
+    const userId = getTelegramUserId();
+    if (!userId) return;
+    try {
+        const res = await fetch(API_URL + '?action=check_coins', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId }),
+        });
+        const data = await res.json();
+        if (data.ok && typeof data.coins === 'number') {
+            const givenKey = 'croodle_paid_coins_given';
+            const given = parseInt(localStorage.getItem(givenKey) || '0', 10);
+            const diff = data.coins - given;
+            if (diff > 0) {
+                coins += diff;
+                localStorage.setItem(givenKey, String(data.coins));
+                updateCoinsUI();
+                saveProgress();
+                playCoin();
+            }
+        }
+    } catch (e) { /* тихо */ }
+}
+
+    function buyBooster(id) {
+        const cfg = BOOSTER_CFG[id];
+        if (!cfg) return;
+        if (coins < cfg.price) return;
+        coins -= cfg.price;
+        inventory[id]++;
+        updateCoinsUI();
+        playCoin();
+        renderShopList();
+        renderInventory();
+        saveProgress();
+    }
+
+    // ================== СОХРАНЕНИЕ / ЗАГРУЗКА ==================
+    function saveProgress() {
+        try {
+            const data = {
+                currentTaskIndex, coins, energy, timeLeft,
+                cells: cells.slice(),
+                spawnerIndex,
+                obstacles: obstacles.map(o => ({ ...o })),
+                rows: ROWS, cols: COLS,
+                inventory: { ...inventory },
+                rockSlowSpawnCounter,
+                taskProgress,
+                gameFinished
+            };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+        } catch(e) {}
+    }
+    function clearSave() {
+        try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+    }
+    function loadProgress() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data || !data.cells) return false;
+
+            currentTaskIndex = data.currentTaskIndex || 0;
+            coins = (typeof data.coins === 'number') ? data.coins : START_COINS;
+            energy = (typeof data.energy === 'number') ? data.energy : START_ENERGY;
+            timeLeft = (typeof data.timeLeft === 'number') ? data.timeLeft : 0;
+            gameFinished = !!data.gameFinished;
+            rockSlowSpawnCounter = data.rockSlowSpawnCounter || 0;
+            taskProgress = data.taskProgress || 0;
+
+            const taskDef = TASKS[currentTaskIndex] || TASKS[0];
+            ROWS = taskDef.rows;
+            COLS = taskDef.cols;
+            TOTAL_CELLS = ROWS * COLS;
+
+            createField(ROWS, COLS);
+            cells = data.cells.slice(0, TOTAL_CELLS);
+            while (cells.length < TOTAL_CELLS) cells.push(0);
+
+            spawnerIndex = (typeof data.spawnerIndex === 'number') ? data.spawnerIndex : 0;
+            if (spawnerIndex >= TOTAL_CELLS) spawnerIndex = 0;
+            bindFieldHandlers(spawnerIndex);
+            setFieldColsUI(COLS);
+
+            obstacles = Array.isArray(data.obstacles) ? data.obstacles.map(o => ({ ...o })) : [];
+            inventory = data.inventory ? { ...data.inventory } : { bomb:0, mega:0, cleaner:0 };
+
+            renderField();
+            refreshTaskText();
+            updateTaskProgressUI();
+            updateTimerUI();
+            updateCoinsUI();
+            updateEnergyUI();
+            renderInventory();
+
+            if (gameFinished) {
+                taskTextEl.innerHTML = `🏆 <b>Все задания выполнены!</b>`;
+                taskProgEl.textContent = 'Победа!';
+                timerTextEl.textContent = '00:00';
+                return true;
+            }
+
+            if (timerHandle) clearInterval(timerHandle);
+            if (timeLeft <= 0) timeLeft = TASKS[currentTaskIndex] ? TASKS[currentTaskIndex].seconds : 60;
+            updateTimerUI();
+            timerHandle = setInterval(() => {
+                if (shopOpen || tutorialOpen || paused || settingsOpen || mergeInFlight) return;
+                timeLeft--;
+                saveProgress();
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    updateTimerUI();
+                    clearInterval(timerHandle); timerHandle = null;
+                    runTaskFailCeremony();
+                } else {
+                    updateTimerUI();
+                }
+            }, 1000);
+
+            if (loseCheckHandle) clearInterval(loseCheckHandle);
+            loseCheckHandle = setInterval(() => {
+                if (gameFinished || transitionLock || shopOpen || tutorialOpen || paused || settingsOpen) return;
+                checkLose();
+            }, LOSE_CHECK_INTERVAL_MS);
+
+            takeTaskSnapshot();
+            return true;
+        } catch(e) { return false; }
+    }
+
+    // ================== СБРОС ==================
+    function resetGame() {
+        clearSave();
+        closeShop();
+        activeBooster = null;
+        paused = false;
+        settingsOpen = false;
+        pauseOverlay.classList.remove('open');
+        settingsOverlay.classList.remove('open');
+        toastHero.classList.remove('visible', 'leaving');
+        toastHeroSad.classList.remove('visible', 'leaving');
+        clearInterval(timerHandle); timerHandle = null;
+        if (loseCheckHandle) { clearInterval(loseCheckHandle); loseCheckHandle = null; }
+
+        coins = START_COINS;
+        energy = START_ENERGY;
+        taskProgress = 0;
+        spawning = false;
+        gameFinished = false;
+        transitionLock = false;
+        currentTaskIndex = 0;
+        rockSlowSpawnCounter = 0;
+        shownTutorials = {};
+        taskStartSnapshot = null;
+
+        inventory = { bomb: 0, mega: 0, cleaner: 0 };
+
+        ROWS = TASKS[0].rows;
+        COLS = TASKS[0].cols;
+        TOTAL_CELLS = ROWS * COLS;
+        cells = new Array(TOTAL_CELLS).fill(0);
+        obstacles = [];
+        createField(ROWS, COLS);
+
+        spawnerIndex = pickSpawnerIndex(ROWS, COLS);
+        bindFieldHandlers(spawnerIndex);
+
+        const allEmpty = [];
+        for (let i = 0; i < TOTAL_CELLS; i++) if (i !== spawnerIndex) allEmpty.push(i);
+        for (let i = allEmpty.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allEmpty[i], allEmpty[j]] = [allEmpty[j], allEmpty[i]];
+        }
+        if (allEmpty[0] !== undefined) cells[allEmpty[0]] = 1;
+        if (allEmpty[1] !== undefined) cells[allEmpty[1]] = 1;
+        if (allEmpty[2] !== undefined) cells[allEmpty[2]] = 2;
+
+        renderField();
+        renderInventory();
+        startTask(0);
+    }
+
+    // ================== СТАРТ ==================
+    resetBtn.addEventListener('click', resetGame);
+    shopBtn.addEventListener('click', openShop);
+    shopClose.addEventListener('click', closeShop);
+    shopOverlay.addEventListener('click', (e) => { if (e.target === shopOverlay) closeShop(); });
+    fieldEl.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Первый жест пользователя — разрешаем звук и запускаем музыку
+    ['pointerdown','click','keydown','touchstart'].forEach(ev =>
+        window.addEventListener(ev, () => {
+            getAudioCtx();
+            startMusicIfNeeded();
+        }, { once: true, passive: true })
+    );
+
+    let __resizeTimer = null;
+    window.addEventListener('resize', () => {
+        if (__resizeTimer) clearTimeout(__resizeTimer);
+        __resizeTimer = setTimeout(() => {
+            updateBoardSize(ROWS, COLS);
+        }, 100);
+    });
+
+    if (!loadProgress()) resetGame();
+})();
+</script>
+</body>
+</html>
