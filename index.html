@@ -3239,9 +3239,19 @@ async function buyCoinPack(packId) {
     if (!pack) return;
 
     if (!userId || typeof tg?.openInvoice !== 'function') {
-        alert('Открой игру через Telegram, чтобы купить монеты.');
-        return;
-    }
+    alert(
+        'Диагностика покупки:\n' +
+        'Версия страницы: mobile-debug-1\n' +
+        'Telegram SDK: ' + (tg ? 'есть' : 'нет') + '\n' +
+        'Версия Telegram WebApp API: ' + (tg?.version || 'нет') + '\n' +
+        'Платформа: ' + (tg?.platform || 'не определена') + '\n' +
+        'Данные запуска initData: ' + (tg?.initData ? 'есть' : 'нет') + '\n' +
+        'User ID: ' + (userId ? 'есть' : 'нет') + '\n' +
+        'openInvoice: ' +
+        (typeof tg?.openInvoice === 'function' ? 'есть' : 'нет')
+    );
+    return;
+}
 
     // Проверяем доступность localStorage до создания счёта.
     try {
