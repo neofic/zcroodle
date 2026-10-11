@@ -16,8 +16,8 @@ export default async function handler(req, res) {
     const BOT_TOKEN = '8975616188:AAHMmX91N8qSO9D0gSNB4HSeBIWR9Grb8nE'; // Твой токен
 
     const PACKS = {
-        small:  { stars: 5,  coins: 100  },
-        medium: { stars: 20, coins: 500  },
+        small:  { stars: 1,  coins: 100  },
+        medium: { stars: 2, coins: 500  },
         large:  { stars: 50, coins: 1500 }
     };
 
