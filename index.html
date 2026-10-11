@@ -942,6 +942,8 @@
     }
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!-- СТРОГО СЮДА ДОБАВЛЯЕМ SDK ТЕЛЕГРАМА -->
+<script src="https://telegram.org"></script>
 </head>
 <body>
 
@@ -3100,7 +3102,7 @@ const COIN_PACKS = [
     { id: 'medium', stars: 20, coins: 500,  label: '500 монет'  },
     { id: 'large',  stars: 50, coins: 1500, label: '1500 монет' },
 ];
-const API_URL = 'api.php';
+const API_URL = '/api';
 
 function getTelegramUserId() {
     const tg = window.Telegram?.WebApp;
