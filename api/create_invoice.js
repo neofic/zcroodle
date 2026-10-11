@@ -13,12 +13,20 @@ export default async function handler(req, res) {
         return res.status(405).json({ ok: false, error: 'Method not allowed' });
     }
 
-    const BOT_TOKEN = '8975616188:AAHMmX91N8qSO9D0gSNB4HSeBIWR9Grb8nE'; // Твой токен
+    const BOT_TOKEN = process.env.BOT_TOKEN;
+
+if (!BOT_TOKEN) {
+    console.error('Не настроена переменная BOT_TOKEN');
+    return res.status(500).json({
+        ok: false,
+        error: 'Оплата временно недоступна: сервер не настроен'
+    });
+}
 
     const PACKS = {
-        small:  { stars: 1,  coins: 100  },
-        medium: { stars: 2, coins: 500  },
-        large:  { stars: 50, coins: 1500 }
+        small:  { stars: 1, coins: 50  },
+        medium: { stars: 10, coins: 600  },
+        large:  { stars: 30, coins: 2000 }
     };
 
     const { pack, user_id } = req.body;

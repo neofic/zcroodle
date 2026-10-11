@@ -4,7 +4,12 @@ export default async function handler(req, res) {
         return res.status(405).send('Method Not Allowed');
     }
 
-    const BOT_TOKEN = '8975616188:AAHMmX91N8qSO9D0gSNB4HSeBIWR9Grb8nE'; // Твой токен
+    const BOT_TOKEN = process.env.BOT_TOKEN;
+
+if (!BOT_TOKEN) {
+    console.error('Не настроена переменная BOT_TOKEN');
+    return res.status(500).send('Server configuration error');
+}
 
     const update = req.body;
 

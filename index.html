@@ -943,7 +943,7 @@
 </style>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <!-- СТРОГО СЮДА ДОБАВЛЯЕМ SDK ТЕЛЕГРАМА -->
-<script src="https://telegram.org"></script>
+
 </head>
 <body>
 
@@ -1436,7 +1436,9 @@
 let mergeInFlight = false;
 
     // ================== HUD ==================
-    function updateCoinsUI() { coinsTextEl.textContent = coins; }
+    function updateCoinsUI() {
+    coinsTextEl.textContent = getAvailableCoins();
+}
     function updateEnergyUI() { energyTextEl.textContent = energy; }
     function updateTimerUI() {
         const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
@@ -2356,22 +2358,22 @@ let mergeInFlight = false;
     }
 
     function takeTaskSnapshot() {
-        taskStartSnapshot = {
-            coins: coins,
-            energy: energy,
-            inventory: { ...inventory }
-        };
-    }
+    taskStartSnapshot = {
+        energy: energy
+    };
+}
 
-    function restoreTaskSnapshot() {
-        if (!taskStartSnapshot) return;
-        coins = taskStartSnapshot.coins;
-        energy = taskStartSnapshot.energy;
-        inventory = { ...taskStartSnapshot.inventory };
-        updateCoinsUI();
-        updateEnergyUI();
-        renderInventory();
-    }
+function restoreTaskSnapshot() {
+    if (!taskStartSnapshot) return;
+
+    // Повтор задания восстанавливает только энергию.
+    // Монеты и текущий инвентарь не откатываются.
+    energy = taskStartSnapshot.energy;
+
+    updateCoinsUI();
+    updateEnergyUI();
+    renderInventory();
+}
 
     function retryCurrentTask() {
         if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
@@ -2397,8 +2399,8 @@ let mergeInFlight = false;
             timerTextEl.textContent = '00:00';
             taskTextEl.innerHTML = `🏆 <b>Все задания выполнены!</b>`;
             taskProgEl.textContent = 'Победа!';
-            clearSave();
-            return;
+saveProgress();
+return;
         }
         startTask(currentTaskIndex);
     }
@@ -3025,21 +3027,32 @@ let mergeInFlight = false;
         renderInventory();
     }
 
+    
     // ================== МАГАЗИН ==================
-    function openShop() {
-    if (gameFinished || transitionLock || tutorialOpen || paused || settingsOpen) return;
+function openShop() {
+    if (
+        gameFinished ||
+        transitionLock ||
+        tutorialOpen ||
+        paused ||
+        settingsOpen
+    ) {
+        return;
+    }
+
     shopOpen = true;
     activeBooster = null;
+
     renderInventory();
     shopOverlay.classList.add('open');
     renderShopList();
-    renderCoinPacks();       // <-- добавить
-    syncPurchasedCoins();    // <-- добавить
+    renderCoinPacks();
 }
-    function closeShop() {
-        shopOpen = false;
-        shopOverlay.classList.remove('open');
-    }
+
+function closeShop() {
+    shopOpen = false;
+    shopOverlay.classList.remove('open');
+}
 
     function renderShopList() {
         shopListEl.innerHTML = '';
@@ -3086,7 +3099,7 @@ let mergeInFlight = false;
             };
             buyBtn.appendChild(coinImg);
 
-            buyBtn.disabled = coins < cfg.price;
+            buyBtn.disabled = getAvailableCoins() < cfg.price;
             buyBtn.addEventListener('click', () => buyBooster(id));
 
             item.appendChild(iconBox);
@@ -3097,21 +3110,82 @@ let mergeInFlight = false;
     }
 
 // ================== ПОКУПКА МОНЕТ ЗА ЗВЁЗДЫ ==================
+
 const COIN_PACKS = [
-    { id: 'small',  stars: 1,  coins: 100,  label: '100 монет'  },
-    { id: 'medium', stars: 2, coins: 500,  label: '500 монет'  },
-    { id: 'large',  stars: 50, coins: 1500, label: '1500 монет' },
+    { id: 'small',  stars: 1,  coins: 50,  label: '100 монет' },
+    { id: 'medium', stars: 10,  coins: 600,  label: '500 монет' },
+    { id: 'large',  stars: 30, coins: 2000, label: '1500 монет' },
 ];
+
 const API_URL = '/api';
+let purchaseBusy = false;
 
 function getTelegramUserId() {
-    const tg = window.Telegram?.WebApp;
-    return tg?.initDataUnsafe?.user?.id || 0;
+    return window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0;
+}
+
+// Купленные монеты не входят в сохранение уровня.
+function getPaidWalletKey() {
+    return 'croodle_paid_wallet_v2_' + getTelegramUserId();
+}
+
+function readPaidWallet() {
+    const raw = localStorage.getItem(getPaidWalletKey());
+
+    if (!raw) {
+        return { balance: 0, creditedPurchases: [] };
+    }
+
+    const data = JSON.parse(raw);
+
+    if (
+        !Number.isSafeInteger(data.balance) ||
+        data.balance < 0 ||
+        !Array.isArray(data.creditedPurchases)
+    ) {
+        throw new Error('Повреждено сохранение купленных монет.');
+    }
+
+    return data;
+}
+
+function writePaidWallet(wallet) {
+    // Не скрываем ошибку: нельзя сообщать об успешном
+    // начислении, если браузер не смог его сохранить.
+    localStorage.setItem(
+        getPaidWalletKey(),
+        JSON.stringify(wallet)
+    );
+}
+
+function getAvailableCoins() {
+    try {
+        return coins + readPaidWallet().balance;
+    } catch (error) {
+        console.error('Ошибка чтения покупного баланса:', error);
+        return coins;
+    }
+}
+
+function creditPurchasedCoins(purchaseId, amount) {
+    const wallet = readPaidWallet();
+
+    // Повторный callback той же покупки не начисляет её дважды.
+    if (wallet.creditedPurchases.includes(purchaseId)) {
+        return false;
+    }
+
+    wallet.balance += amount;
+    wallet.creditedPurchases.push(purchaseId);
+    writePaidWallet(wallet);
+
+    return true;
 }
 
 function renderCoinPacks() {
     const list = document.getElementById('coinPacksList');
     if (!list) return;
+
     list.innerHTML = '';
 
     for (const pack of COIN_PACKS) {
@@ -3120,105 +3194,171 @@ function renderCoinPacks() {
 
         const iconBox = document.createElement('div');
         iconBox.className = 'shop-item-icon';
+
         const img = document.createElement('img');
         img.src = `${IMG_PATH}/coin.png`;
-        img.alt = 'coin';
+        img.alt = 'Монеты';
         img.onerror = () => {
-            img.remove();
-            const fb = document.createElement('span');
-            fb.className = 'icon-fallback';
-            fb.textContent = '🪙';
-            iconBox.appendChild(fb);
+            iconBox.textContent = '🪙';
         };
         iconBox.appendChild(img);
 
         const info = document.createElement('div');
         info.className = 'shop-item-info';
-        info.innerHTML = `<h4>${pack.label}</h4><p>Пополнение игрового баланса</p>`;
+        info.innerHTML =
+            `<h4>${pack.label}</h4>` +
+            '<p>Пополнение игрового баланса</p>';
 
         const buyBtn = document.createElement('button');
         buyBtn.className = 'shop-item-buy';
-        buyBtn.innerHTML = `<span>${pack.stars}</span> ⭐`;
+        buyBtn.textContent = `${pack.stars} ⭐`;
+        buyBtn.disabled = purchaseBusy;
         buyBtn.addEventListener('click', () => buyCoinPack(pack.id));
 
-        item.appendChild(iconBox);
-        item.appendChild(info);
-        item.appendChild(buyBtn);
+        item.append(iconBox, info, buyBtn);
         list.appendChild(item);
     }
 }
 
+function finishPurchase() {
+    purchaseBusy = false;
+
+    if (shopOpen) {
+        renderCoinPacks();
+        renderShopList();
+    }
+}
+
 async function buyCoinPack(packId) {
+    if (purchaseBusy) return;
+
     const tg = window.Telegram?.WebApp;
     const userId = getTelegramUserId();
-    if (!userId) {
+    const pack = COIN_PACKS.find(item => item.id === packId);
+
+    if (!pack) return;
+
+    if (!userId || typeof tg?.openInvoice !== 'function') {
         alert('Открой игру через Telegram, чтобы купить монеты.');
         return;
     }
 
+    // Проверяем доступность localStorage до создания счёта.
     try {
-        const res = await fetch(API_URL + '/create_invoice', {
+        writePaidWallet(readPaidWallet());
+    } catch (error) {
+        alert(
+            'Покупка отключена: не удалось сохранить баланс на устройстве. ' +
+            error.message
+        );
+        return;
+    }
+
+    const purchaseId =
+        globalThis.crypto?.randomUUID?.() ||
+        `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    purchaseBusy = true;
+    renderCoinPacks();
+
+    try {
+        const res = await fetch(`${API_URL}/create_invoice`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pack: packId, user_id: userId }),
+            body: JSON.stringify({
+                pack: pack.id,
+                user_id: userId,
+            }),
         });
-        const data = await res.json();
-        if (!data.ok || !data.url) {
-            alert('Не удалось создать счёт: ' + (data.error || 'неизвестная ошибка'));
-            return;
+
+        const text = await res.text();
+        let data;
+
+        try {
+            data = JSON.parse(text);
+        } catch {
+            throw new Error(
+                `Сервер вернул не JSON. HTTP ${res.status}. ` +
+                text.slice(0, 100)
+            );
         }
 
-        if (tg && tg.openInvoice) {
-            tg.openInvoice(data.url, (status) => {
-                if (status === 'paid') {
-                    setTimeout(syncPurchasedCoins, 1500);
-                }
-            });
-        } else {
-            window.open(data.url, '_blank');
+        if (!res.ok || !data.ok || !data.url) {
+            throw new Error(
+                data.error || `Не удалось создать счёт. HTTP ${res.status}`
+            );
         }
-    } catch (e) {
-        alert('Ошибка соединения с сервером: ' + e.message);
+
+        tg.openInvoice(data.url, (status) => {
+            try {
+                if (status === 'paid') {
+                    const credited = creditPurchasedCoins(
+                        purchaseId,
+                        pack.coins
+                    );
+
+                    updateCoinsUI();
+
+                    if (credited) {
+                        playCoin();
+                        alert(`Оплата прошла. Начислено ${pack.coins} монет.`);
+                    }
+                } else if (status === 'pending') {
+                    alert(
+                        'Платёж ещё обрабатывается. ' +
+                        'Не оплачивай повторно. В этой локальной версии ' +
+                        'отложенное начисление не гарантируется.'
+                    );
+                } else if (status === 'failed') {
+                    alert('Telegram сообщил об ошибке оплаты.');
+                }
+            } catch (error) {
+                console.error('Ошибка начисления после оплаты:', error);
+                alert(
+                    'Оплата получена, но сохранить монеты не удалось. ' +
+                    'Не оплачивай повторно. ' + error.message
+                );
+            } finally {
+                finishPurchase();
+            }
+        });
+    } catch (error) {
+        finishPurchase();
+        alert('Не удалось открыть оплату: ' + error.message);
     }
 }
 
-async function syncPurchasedCoins() {
-    const userId = getTelegramUserId();
-    if (!userId) return;
-    try {
-        const res = await fetch(API_URL + '?action=check_coins', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId }),
-        });
-        const data = await res.json();
-        if (data.ok && typeof data.coins === 'number') {
-            const givenKey = 'croodle_paid_coins_given';
-            const given = parseInt(localStorage.getItem(givenKey) || '0', 10);
-            const diff = data.coins - given;
-            if (diff > 0) {
-                coins += diff;
-                localStorage.setItem(givenKey, String(data.coins));
-                updateCoinsUI();
-                saveProgress();
-                playCoin();
-            }
-        }
-    } catch (e) { /* тихо */ }
-}
-
     function buyBooster(id) {
-        const cfg = BOOSTER_CFG[id];
-        if (!cfg) return;
-        if (coins < cfg.price) return;
-        coins -= cfg.price;
+    const cfg = BOOSTER_CFG[id];
+    if (!cfg) return;
+
+    try {
+        const wallet = readPaidWallet();
+
+        if (coins + wallet.balance < cfg.price) return;
+
+        // Сначала расходуем заработанные монеты.
+const earnedPart = Math.min(coins, cfg.price);
+const paidPart = cfg.price - earnedPart;
+
+        if (paidPart > 0) {
+            wallet.balance -= paidPart;
+            writePaidWallet(wallet);
+        }
+
+        coins -= earnedPart;
         inventory[id]++;
+
         updateCoinsUI();
         playCoin();
         renderShopList();
         renderInventory();
         saveProgress();
+    } catch (error) {
+        console.error('Ошибка покупки бустера:', error);
+        alert('Не удалось купить бустер: ' + error.message);
     }
+}
 
     // ================== СОХРАНЕНИЕ / ЗАГРУЗКА ==================
     function saveProgress() {
@@ -3368,7 +3508,14 @@ async function syncPurchasedCoins() {
     }
 
     // ================== СТАРТ ==================
-    resetBtn.addEventListener('click', resetGame);
+    resetBtn.addEventListener('click', () => {
+    const confirmed = confirm(
+        'Сбросить уровни, заработанные монеты и все бустеры? ' +
+        'Остаток купленных монет сохранится.'
+    );
+
+    if (confirmed) resetGame();
+});
     shopBtn.addEventListener('click', openShop);
     shopClose.addEventListener('click', closeShop);
     shopOverlay.addEventListener('click', (e) => { if (e.target === shopOverlay) closeShop(); });
